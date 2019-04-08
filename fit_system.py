@@ -1,36 +1,39 @@
-import lightkurve as lk
-import pandas as pd
-import numpy as np
+import os.path
 import matplotlib.pyplot as plt
+from matplotlib.backends.backend_pdf import PdfPages
+
+import numpy as np
+import pandas as pd
+import lightkurve as lk
+
+import corner
 import pymc3 as pm
 import exoplanet as xo
 import theano.tensor as tt
-import corner
 import astropy.units as unit
-from matplotlib.backends.backend_pdf import PdfPages
 
 # read in CSV file with planet parameters
 kois = pd.read_csv('data/planets_2019.04.02_11.43.16.csv', skiprows=range(81));
 
 # set target name and find indices
-target_name = 'K2-99'
-ind = np.where(kois['pl_hostname'] == target_name)[0][0]
+target_name = 'K2-80'
+ind = np.where(kois['pl_hostname'] == target_name)[0]
 
 # store planet parameters
-host = kois['pl_hostname'][ind]
-pl_period = kois['pl_orbper'][ind]
-pl_t0 = kois['pl_tranmid'][ind] - 2454833 # JD -> BKJD
-r_ratio = (kois['pl_radj'][ind]*unit.jupiterRad / kois['st_rad'][ind]*unit.solRad).value
-depth = r_ratio ** 2
+host = np.atleast_1d(kois['pl_hostname'][ind])[0]
+pl_period = np.array(kois['pl_orbper'][ind], dtype=float)
+pl_t0 = np.array(kois['pl_tranmid'][ind], dtype=float) - 2454833 # JD -> BKJD
+r_ratio = np.array([(kois['pl_radj'][i]*unit.jupiterRad / kois['st_rad'][i]*unit.solRad).value for i in ind], dtype=float)
 
 # store stellar parameters
-logg = kois['st_logg'][ind]
-logg_err = kois['st_loggerr1'][ind]
-rad_star = kois['st_rad'][ind]
-rad_star_err = kois['st_raderr1'][ind]
+logg = np.atleast_1d(kois['st_logg'][ind])[0]
+logg_err = np.atleast_1d(kois['st_loggerr1'][ind])[0]
+rad_star = np.atleast_1d(kois['st_rad'][ind])[0]
+rad_star_err = np.atleast_1d(kois['st_raderr1'][ind])[0]
 
 # array of planet labels
-letters = "bcdefghijklmnopqrstuvwxyz"[:1]
+n_planets = len(pl_period)
+letters = "bcdefghijklmnopqrstuvwxyz"[:n_planets]
 
 def get_transit_mask(t, t0, period, duration):
     """Return cadences in t during transit given t0, period, duration."""
@@ -39,13 +42,22 @@ def get_transit_mask(t, t0, period, duration):
 
 # download tpf
 # NOTE: only the first tpf is downloaded for now
-tpf = lk.search_targetpixelfile(host)[0].download(quality_bitmask='hardest')
+tpf_collection = lk.search_targetpixelfile(host)[0].download_all(quality_bitmask='hardest')
 
-# perform 3rd order PLD
-mask = get_transit_mask(tpf.time, pl_t0, pl_period, 0.7)
-pld = tpf.to_corrector('pld')
-lc = pld.correct(aperture_mask='pipeline', cadence_mask=~mask, use_gp=True, pld_order=3)
-lc = lc.normalize().remove_outliers()
+# Run PLD on each TPF to extract the light curves
+lc_collection = []
+for tpf in tpf_collection:
+    mask = np.zeros_like(tpf.time, dtype=bool)
+    for i in range(len(pl_period)):
+        mask |= get_transit_mask(tpf.time, pl_t0[i], pl_period[i], 0.7)
+    pld = tpf.to_corrector("pld")
+    lc = pld.correct(aperture_mask="pipeline", cadence_mask=~mask, use_gp=False, pld_order=2)
+    lc_collection.append(lc.normalize())
+
+# Normalize and stitch the sectors
+lc = lc_collection[0]
+if len(lc_collection) > 1:
+    lc = lc.append([next_lc for next_lc in lc_collection[1:]])
 
 # Remove outliers
 _, outliers = lc.flatten(mask=mask).remove_outliers(return_mask=True)
@@ -103,7 +115,6 @@ def build_model(x, y, yerr, periods, t0s, r_ratio, mask=None, start=None):
     periods = np.atleast_1d(periods)
     t0s = np.atleast_1d(t0s)
     r_ratio = np.atleast_1d(r_ratio)
-    n_planets = len(periods)
 
     with pm.Model() as model:
 
@@ -129,8 +140,8 @@ def build_model(x, y, yerr, periods, t0s, r_ratio, mask=None, start=None):
         u = xo.distributions.QuadLimbDark("u")
 
         # Orbital parameters
-        b = pm.Uniform("b", lower=0, upper=1, testval=0.5)
-        logr = pm.Normal("logr", sd=1.0, mu=0.5*np.log(r_ratio[0])+np.log(rad_star))
+        b = pm.Uniform("b", lower=0, upper=1, testval=0.5, shape=n_planets)
+        logr = pm.Normal("logr", sd=1.0, mu=0.5*np.log(r_ratio[0])+np.log(rad_star), shape=n_planets)
         r_pl = pm.Deterministic("r_pl", tt.exp(logr))
         rprs = pm.Deterministic("rprs", r_pl / r_star) # rp/rs
         logP = pm.Normal("logP", mu=np.log(periods), sd=0.1, shape=n_planets)
@@ -188,8 +199,10 @@ with model:
     trace = sampler.sample(draws=1000)
 
 # store outputs and save summary as a csv
+if not os.path.isdir(target_name):
+    os.mkdir(target_name)
 out = pm.summary(trace)
-out.to_csv('{}_fit_parameters.csv'.format(target_name))
+out.to_csv('{}/{}_fit_parameters.csv'.format(target_name, target_name))
 
 # compute fits for out light curves from the sampled parameters
 periods = [pl_period]
@@ -201,7 +214,7 @@ with model:
         light_curves[i] = func(*xo.utils.get_args_for_theano_function(sample))
 
 # save informative figures to a pdf summary
-with PdfPages('{} summary'.format(target_name)) as pdf:
+with PdfPages('{}/{}_summary.pdf'.format(target_name, target_name)) as pdf:
 
     '''Plot the tpf.'''
     plt.figure(figsize=(3,3))
@@ -272,6 +285,7 @@ with PdfPages('{} summary'.format(target_name)) as pdf:
 
     '''Orbital parameters corner plot.'''
     # Convert to Earth radii
+    '''
     plt.figure(figsize=(7,7))
     r_pl = trace["r_pl"] * 109.07637070600963
     samples = np.concatenate(([trace['r_pl']], [trace["b"]]), axis=0).T
@@ -283,8 +297,9 @@ with PdfPages('{} summary'.format(target_name)) as pdf:
                   show_titles=True, title_kwargs=dict(fontsize=10));
     pdf.savefig()
     plt.close()
-
+    '''
     '''Orbital parameters 2 corner plot.'''
+    ''''
     plt.figure(figsize=(7,7))
     labels = ["$P_{{{0}}}$ [days]".format(i) for i in letters]
     labels += ["$t0_{{{0}}}$ [TBJD]".format(i) for i in letters]
@@ -294,11 +309,13 @@ with PdfPages('{} summary'.format(target_name)) as pdf:
                   title_kwargs=dict(fontsize=10));
     pdf.savefig()
     plt.close()
+    '''
 
     '''Stellar parameters corner plot.'''
-    plt.figure(figsize=(7,7)
+    '''
+    plt.figure(figsize=(7,7))
     labels = ["$R_\mathrm{star}$ [$R_\odot$]", "$\log g$ [cm/s$^2$]",
-          r"$M_\mathrm{star}$ [$\rho_\odot$]"]
+              r"$M_\mathrm{star}$ [$\rho_\odot$]"]
     samples = np.vstack((trace["r_star"], trace["logg_star"], trace["rho_star"])).T
     corner.corner(samples, labels=labels,
                   show_titles=True,
@@ -306,3 +323,4 @@ with PdfPages('{} summary'.format(target_name)) as pdf:
 
     pdf.savefig()
     plt.close()
+    '''
