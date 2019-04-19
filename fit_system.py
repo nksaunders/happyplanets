@@ -20,6 +20,14 @@ from astropy.stats import sigma_clip
 from astropy.convolution import convolve, Box1DKernel
 from itertools import combinations_with_replacement as multichoose
 
+def duck(name='the checkpoint', fail=False):
+    shut_up_duck = False
+    if not shut_up_duck:
+        if not fail:
+            print('Rubber duck floated past {}.'.format(name))
+        else:
+            print('The duck is dead.')
+
 # read in CSV file with planet parameters
 kois = pd.read_csv('data/planets_2019.04.02_11.43.16.csv', skiprows=range(81));
 
@@ -45,14 +53,20 @@ rad_star_err = np.atleast_1d(kois['st_raderr1'][ind])[0]
 n_planets = len(pl_period)
 letters = "bcdefghijklmnopqrstuvwxyz"[:n_planets]
 
+# set aperture
+global_aperture = 'pipeline'
+
 def get_transit_mask(t, t0, period, duration):
     """Return cadences in t during transit given t0, period, duration."""
     hp = 0.5*period
     return np.abs((t-t0+hp) % period - hp) < 0.5*duration
 
+duck('the easy stuff')
 # download tpf
 # NOTE: only the first tpf is downloaded for now
 tpf_collection = lk.search_targetpixelfile(host)[0].download_all(quality_bitmask='hardest')
+
+duck('downloading')
 
 @contextmanager
 def silence():
@@ -71,6 +85,7 @@ def silence():
 
 def PyMC_PLD(tpf, planet_mask, aperture, sigma=5, ndraws=1000, pld_order=3, n_pca_terms=10):
     """ """
+    duck('PyMC PLD being called')
 
     time = np.asarray(tpf.time, np.float64)
     flux = np.asarray(tpf.flux, np.float64)
@@ -104,23 +119,25 @@ def PyMC_PLD(tpf, planet_mask, aperture, sigma=5, ndraws=1000, pld_order=3, n_pc
     X1 = X1[:, ~((~np.isfinite(X1)).all(axis=0))]
     X1 = X1 / np.sum(flux[:, aper], axis=-1)[:, None]
 
+    duck('the first order design matrix with shape {}'.format(X1.shape))
     # higher order PLD design matrices
     X_sections = [X1]
     for i in range(2, pld_order+1):
+        duck('higher order pld loop')
         f2 = np.product(list(multichoose(X1.T, pld_order)), axis=1).T
+        duck('multichoose')
         try:
             # We use an optional dependency for very fast PCA (fbpca).
             # If the import fails we will fall back on using the slower `np.linalg.svd`
             from fbpca import pca
+            duck('fbpca import')
             components, _, _ = pca(f2, n_pca_terms)
         except ImportError:
-            log.error("PLD uses the `fbpca` package. You can pip install "
-                      "with `pip install fbpca`. Using `np.linalg.svd` "
-                      "instead.")
+            duck(fail=True)
             components, _, _ = np.linalg.svd(f2)
         X_n = components[:, :n_pca_terms]
         X_sections.append(X_n)
-
+    duck('the higher order matrices')
     # Create the design matrix X by stacking X1 and higher order components, and
     # adding a column vector of 1s for numerical stability (see Luger et al.).
     # X has shape (n_components_first + n_components_higher_order + 1, n_cadences)
@@ -160,7 +177,7 @@ def PyMC_PLD(tpf, planet_mask, aperture, sigma=5, ndraws=1000, pld_order=3, n_pc
             mask = np.ones(len(time), dtype=bool)
 
         with pm.Model() as model:
-
+            duck('beginning of the model')
             # GP
             # --------
             diag = np.array(raw_flux_err**2)
@@ -174,6 +191,7 @@ def PyMC_PLD(tpf, planet_mask, aperture, sigma=5, ndraws=1000, pld_order=3, n_pc
 
             # Motion model
             #------------------
+            import pdb; pdb.set_trace()
             A = tt.dot(X_pld.T, gp.apply_inverse(X_pld))
             B = tt.dot(X_pld.T, gp.apply_inverse(raw_flux[:, None]))
             C = tt.slinalg.solve(A, B)
@@ -259,7 +277,9 @@ for tpf in tpf_collection:
     mask = np.zeros_like(tpf.time, dtype=bool)
     for i in range(n_planets):
         mask |= get_transit_mask(tpf.time, pl_t0[i], pl_period[i], 0.7)
-    time, flux, error = PyMC_PLD(tpf, mask, tpf.pipeline_mask)
+    # aperture_mask = tpf._parse_aperture_mask(global_aperture)
+    aperture_mask = tpf.pipeline_mask
+    time, flux, error = PyMC_PLD(tpf, mask, aperture_mask)
     x = np.append(x, time)
     y = np.append(y, flux)
     yerr = np.append(yerr, error)
@@ -387,7 +407,7 @@ with PdfPages('{}/{}_summary.pdf'.format(target_name, target_name)) as pdf:
 
     '''Plot the tpf.'''
     plt.figure(figsize=(3,3))
-    tpf.plot(aperture_mask='pipeline')
+    tpf.plot(aperture_mask=global_aperture)
     plt.title('TPF')
     pdf.savefig()
     plt.close()
