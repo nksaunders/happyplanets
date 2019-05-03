@@ -36,18 +36,18 @@ class TransitFit(object):
             self.ind = np.where(self.kois['pl_hostname'] == self.target_name)[0]
         else:
             raise ValueError("Please specify either `target_name` or `ind`.")
-        prelim_model_built = False
+        self.prelim_model_built = False
 
     def test_fit(self):
         """ """
         x, y, yerr = self.detrend()
         self.model = self.fit(x, y, yerr)
-        prelim_model_built = True
+        self.prelim_model_built = True
         self.preview(self.model)
 
     def full_fit(self):
         """ """
-        if not prelim_model_built:
+        if not self.prelim_model_built:
             x, y, yerr = self.detrend()
             self.model = self.fit(x, y, yerr)
         model, light_curves, trace = self.sample(self.model)
