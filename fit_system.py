@@ -318,8 +318,8 @@ class TransitFit(object):
                 # The baseline (out-of-transit) flux for the star in ppt
                 mean = pm.Normal("mean", mu=0.0, sd=10.0)
                 # logg_star = pm.Normal("logg_star", mu=logg, sd=logg_err)
-                r_star = pm.Normal("r_star", mu=self.rad_star, sd=self.rad_star_err*2)
-                m_star = pm.Normal("m_star", mu=self.mass_star, sd=self.mass_star_err*2)
+                r_star = pm.Normal("r_star", mu=self.rad_star, sd=self.rad_star_err)
+                m_star = pm.Normal("m_star", mu=self.mass_star, sd=self.mass_star_err)
 
                 # Prior to require physical parameters
                 pm.Potential("r_star_prior", tt.switch(r_star > 0, 0, -np.inf))
@@ -334,8 +334,8 @@ class TransitFit(object):
                 b = pm.Uniform("b", lower=0, upper=1, testval=0.5, shape=self.n_planets)
                 logr = pm.Normal("logr", sd=1.0, mu=np.log(r_ratio)+np.log(self.rad_star), shape=self.n_planets)
                 r_pl = pm.Deterministic("r_pl", tt.exp(logr))
-                rprs = pm.Deterministic("rprs", r_pl / r_star) # rp/rs
-                logP = pm.Normal("logP", mu=np.log(periods), sd=self.pl_period_err*2, shape=self.n_planets)
+                rprs = pm.Deterministic("rprs", r_pl / r_star)
+                logP = pm.Normal("logP", mu=np.log(periods), sd=self.pl_period_err, shape=self.n_planets)
                 period = pm.Deterministic("period", tt.exp(logP))
 
                 # factor * 10**logg / r_star = rho
