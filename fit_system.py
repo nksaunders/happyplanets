@@ -78,7 +78,7 @@ class TransitFit(object):
         self.letters = "bcdefghijklmnopqrstuvwxyz"[:self.n_planets]
 
         # set aperture
-        self.global_aperture = 'threshold'
+        self.global_aperture = 'pipeline'
 
         duck('the easy stuff')
         # download tpf
@@ -99,7 +99,11 @@ class TransitFit(object):
             mask = np.zeros_like(tpf.time, dtype=bool)
             for i in range(self.n_planets):
                 mask |= self.get_transit_mask(tpf.time, self.pl_t0[i], self.pl_period[i], 0.3)
-            aperture_mask = tpf._parse_aperture_mask(self.global_aperture)
+            # make sure the pipeline aperture has at least 3 pixels
+            if np.sum(tpf._parse_aperture_mask('pipeline'), axis=(0,1)) >= 3:
+                aperture_mask = tpf._parse_aperture_mask(self.global_aperture)
+            else:
+                aperture_mask = tpf._parse_aperture_mask('threshold')
             time, flux, error = self.PyMC_PLD(tpf, mask, aperture_mask)
 
             x = np.append(x, time)
