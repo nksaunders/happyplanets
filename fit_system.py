@@ -596,10 +596,17 @@ class TransitFit(object):
         model = tls(x, y)
         result = model.power()
 
+        """--------------------------------
+        MAKE IT THE TOP 3 INSTEAD OF JUST 1
+        --------------------------------"""
+
         with PdfPages('tls_signals/{}.pdf'.format(self.target_name)) as pdf:
 
             # unfolded lc
             with plt.style.context(MPLSTYLE):
+                for lc in light_curves[0].T:
+                    lc_plot = lc + 1
+                    plt.plot(x, lc_plot, 'b--', alpha=0.5)
                 plt.plot(x, y, 'k.')
                 plt.plot(result.model_lightcurve_time, result.model_lightcurve_model, 'r')
 
@@ -615,9 +622,11 @@ class TransitFit(object):
                 plt.plot(result.folded_phase, result.folded_y, 'k.')
                 plt.plot(result.model_folded_phase, result.model_folded_model, 'r')
 
-                plt.xlabel('Phase')
+                plt.xlabel('Phase Folded (Period: {:7f} days)'.format(result.period))
                 plt.ylabel('Normalized Flux')
                 plt.title('{}'.format(self.target_name))
+                plt.annotate('t0: {:7f} days'.format(result.T0), xy=(0.85, 1.0025), xycoords='axes fraction',
+                        color='w', fontsize=12)
 
                 pdf.savefig()
                 plt.close()
@@ -628,16 +637,18 @@ class TransitFit(object):
                 plt.plot(result.model_folded_phase, result.model_folded_model, 'r')
                 plt.xlim([.4, .6])
 
-                plt.xlabel('Phase')
+                plt.xlabel('Phase Folded (Period: {:7f} days)'.format(result.period))
                 plt.ylabel('Normalized Flux')
                 plt.title('{}'.format(self.target_name))
+                plt.annotate('t0: {:7f} days'.format(result.T0), xy=(0.55, 1.0025), xycoords='axes fraction',
+                        color='w', fontsize=12)
 
                 pdf.savefig()
                 plt.close()
 
             # TLS periodogram
             with plt.style.context(MPLSTYLE):
-                plt.plot(results.periods, results.power)
+                plt.plot(result.periods, result.power)
 
                 plt.xlabel('Period')
                 plt.ylabel('Power')
