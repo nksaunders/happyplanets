@@ -601,7 +601,7 @@ class TransitFit(object):
             # unfolded lc
             with plt.style.context(MPLSTYLE):
                 plt.plot(x, y, 'k.')
-                plt.plot(result.model_lightcurve_time, result.model_model_lightcurve_model, 'r')
+                plt.plot(result.model_lightcurve_time, result.model_lightcurve_model, 'r')
 
                 plt.xlabel('Time')
                 plt.ylabel('Normalized Flux')
