@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 import lightkurve as lk
 import matplotlib.pyplot as plt
+from lightkurve import MPLSTYLE
 from astropy.table import Table
 
 import corner
@@ -27,30 +28,31 @@ class TransitFit(object):
         # read in CSV file with planet parameters
         self.kois = pd.read_csv('data/planets_2019.04.02_11.43.16.csv', skiprows=range(81))
 
+        # set target name and find indices
         if target_name is not None:
-            # set target name and find indices
             self.target_name = target_name
-            self.ind = np.where(self.kois['pl_hostname'] == self.target_name)[0]
         elif ind is not None:
             self.target_name = self.kois['pl_hostname'][ind]
-            self.ind = np.where(self.kois['pl_hostname'] == self.target_name)[0]
         else:
             raise ValueError("Please specify either `target_name` or `ind`.")
+
+        self.ind = np.where(self.kois['pl_hostname'] == self.target_name)[0]
         self.prelim_model_built = False
 
     def test_fit(self):
         """ """
-        x, y, yerr = self.detrend()
-        self.model = self.fit(x, y, yerr)
+        self.x, self.y, yerr = self.detrend()
+        self.model = self.fit(self.x, self.y, yerr)
         self.prelim_model_built = True
         self.preview(self.model)
 
     def full_fit(self):
         """ """
         if not self.prelim_model_built:
-            x, y, yerr = self.detrend()
-            self.model = self.fit(x, y, yerr)
+            self.x, self.y, yerr = self.detrend()
+            self.model = self.fit(self.x, self.y, yerr)
         model, light_curves, trace = self.sample(self.model)
+        self.new_tls_search(self.x, self.y, light_curves)
         self.pdf_summary(model, light_curves, trace)
 
     def get_transit_mask(self, t, t0, period, duration):
@@ -92,8 +94,8 @@ class TransitFit(object):
         yerr = np.array([], np.float64)
         outliers = np.array([], bool)
 
-        # store the first tpf to plot later
-        self.tpf_for_plotting = tpf_collection[0]
+        # store the tpf to plot later
+        self.tpf_collection = tpf_collection
 
         for tpf in tpf_collection:
             mask = np.zeros_like(tpf.time, dtype=bool)
@@ -438,7 +440,7 @@ class TransitFit(object):
             print('Generating summary for target {}.'.format(self.target_name))
 
             '''Plot the tpf.'''
-            tpf = self.tpf_for_plotting
+            tpf = self.tpf_collection[0]
             plt.figure(figsize=(3,3))
             tpf.plot(aperture_mask=self.global_aperture)
             plt.title('TPF')
@@ -544,6 +546,106 @@ class TransitFit(object):
                           title_kwargs=dict(fontsize=10));
             pdf.savefig()
             plt.close()
+
+    def new_tls_search(self, x, y, light_curves):
+        """ """
+
+        from transitleastsquares import transitleastsquares as tls
+
+        #normalize to 1 and rescale
+        y = y * 1e-3 + 1
+
+        # remove known transit models
+        for lc in light_curves[0].T:
+            y = y - lc
+
+        # build tls model, find peak signals
+        model = tls(x, y)
+        result = model.power()
+
+        # reset variables
+        x = np.array([], np.float64)
+        y = np.array([], np.float64)
+        yerr = np.array([], np.float64)
+
+        # re-de-trend with mask including new signal
+        for tpf in self.tpf_collection:
+            mask = np.zeros_like(tpf.time, dtype=bool)
+            for i in range(self.n_planets):
+                mask |= self.get_transit_mask(tpf.time, self.pl_t0[i], self.pl_period[i], 0.3)
+            mask |= self.get_transit_mask(tpf.time, result.T0, result.period, 0.3)
+            # make sure the pipeline aperture has at least 3 pixels
+            if np.sum(tpf._parse_aperture_mask('pipeline'), axis=(0,1)) >= 3:
+                aperture_mask = tpf._parse_aperture_mask(self.global_aperture)
+            else:
+                aperture_mask = tpf._parse_aperture_mask('threshold')
+            time, flux, error = self.PyMC_PLD(tpf, mask, aperture_mask)
+
+            x = np.append(x, time)
+            y = np.append(y, flux)
+            yerr = np.append(yerr, error)
+
+        #normalize to 1 and rescale
+        y = y * 1e-3 + 1
+
+        # remove known transit models
+        for lc in light_curves[0].T:
+            y = y - lc
+
+        # build tls model, find peak signals
+        model = tls(x, y)
+        result = model.power()
+
+        with PdfPages('tls_signals/{}.pdf'.format(self.target_name)) as pdf:
+
+            # unfolded lc
+            with plt.style.context(MPLSTYLE):
+                plt.plot(x, y, 'k.')
+                plt.plot(result.model_lightcurve_time, result.model_model_lightcurve_model, 'r')
+
+                plt.xlabel('Time')
+                plt.ylabel('Normalized Flux')
+                plt.title('{}'.format(self.target_name))
+
+                pdf.savefig()
+                plt.close()
+
+            # folded lc
+            with plt.style.context(MPLSTYLE):
+                plt.plot(result.folded_phase, result.folded_y, 'k.')
+                plt.plot(result.model_folded_phase, result.model_folded_model, 'r')
+
+                plt.xlabel('Phase')
+                plt.ylabel('Normalized Flux')
+                plt.title('{}'.format(self.target_name))
+
+                pdf.savefig()
+                plt.close()
+
+            # zoomed in
+            with plt.style.context(MPLSTYLE):
+                plt.plot(result.folded_phase, result.folded_y, 'k.')
+                plt.plot(result.model_folded_phase, result.model_folded_model, 'r')
+                plt.xlim([.4, .6])
+
+                plt.xlabel('Phase')
+                plt.ylabel('Normalized Flux')
+                plt.title('{}'.format(self.target_name))
+
+                pdf.savefig()
+                plt.close()
+
+            # TLS periodogram
+            with plt.style.context(MPLSTYLE):
+                plt.plot(results.periods, results.power)
+
+                plt.xlabel('Period')
+                plt.ylabel('Power')
+                plt.title('{}'.format(self.target_name))
+
+                pdf.savefig()
+                plt.close()
+
 
 
 @contextmanager
