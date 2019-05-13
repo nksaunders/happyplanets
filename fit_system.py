@@ -5,6 +5,7 @@ import warnings
 from contextlib import contextmanager
 from matplotlib.backends.backend_pdf import PdfPages
 
+import copy
 import numpy as np
 import pandas as pd
 import lightkurve as lk
@@ -39,6 +40,7 @@ class TransitFit(object):
         self.ind = np.where(self.kois['pl_hostname'] == self.target_name)[0]
         self.prelim_model_built = False
 
+
     def test_fit(self):
         """ """
         self.x, self.y, yerr = self.detrend()
@@ -46,19 +48,35 @@ class TransitFit(object):
         self.prelim_model_built = True
         self.preview(self.model)
 
+
     def full_fit(self):
         """ """
         if not self.prelim_model_built:
             self.x, self.y, yerr = self.detrend()
+            print("full_fit: y has shape {}".format(y.shape))
             self.model = self.fit(self.x, self.y, yerr)
         model, light_curves, trace = self.sample(self.model)
         self.new_tls_search(self.x, self.y, light_curves)
         self.pdf_summary(model, light_curves, trace)
 
+
     def get_transit_mask(self, t, t0, period, duration):
         """Return cadences in t during transit given t0, period, duration."""
         hp = 0.5*period
         return np.abs((t-t0+hp) % period - hp) < 0.5*duration
+
+
+    def remove_outliers(self, x, y, yerr, mask, sigma=5):
+        """Remove outliers from masked light curve for given sigma."""
+
+        y_mask = copy.copy(y)
+        y_mask[mask] = np.mean(y[~mask])
+
+        out = np.array([], bool)
+        out = np.append(out, sigma_clip(y_mask, sigma=sigma).mask)
+
+        return x[~out], y[~out], yerr[~out], out
+
 
     def detrend(self):
         # store planet parameters
@@ -82,17 +100,13 @@ class TransitFit(object):
         # set aperture
         self.global_aperture = 'pipeline'
 
-        duck('the easy stuff')
         # download tpf
         # NOTE: only the first tpf is downloaded for now
         tpf_collection = lk.search_targetpixelfile(self.host)[0].download_all(quality_bitmask='hardest')
 
-        duck('downloading')
-
         x = np.array([], np.float64)
         y = np.array([], np.float64)
         yerr = np.array([], np.float64)
-        outliers = np.array([], bool)
 
         # store the tpf to plot later
         self.tpf_collection = tpf_collection
@@ -111,13 +125,12 @@ class TransitFit(object):
             x = np.append(x, time)
             y = np.append(y, flux)
             yerr = np.append(yerr, error)
-            # outliers = np.append(outliers, ~sigma_clip(y[mask], sigma=5).mask)
 
         return x, y, yerr
 
-    def PyMC_PLD(self, tpf, planet_mask, aperture, sigma=5, ndraws=1000, pld_order=3, n_pca_terms=10):
+
+    def PyMC_PLD(self, tpf, planet_mask, aperture, sigma=5, ndraws=1000, pld_order=3, n_pca_terms=10, tlsing=False):
         """ """
-        duck('PyMC PLD being called')
 
         time = np.asarray(tpf.time, np.float64)
         flux = np.asarray(tpf.flux, np.float64)
@@ -151,20 +164,15 @@ class TransitFit(object):
         X1 = X1[:, ~((~np.isfinite(X1)).all(axis=0))]
         X1 = X1 / np.sum(flux[:, aper], axis=-1)[:, None]
 
-        duck('the first order design matrix with shape {}'.format(X1.shape))
         # higher order PLD design matrices
-        # X_sections = [np.ones((len(X1), 1)), X1]
         X_sections = [X1]
         for i in range(2, pld_order+1):
-            duck('higher order pld loop')
             f2 = np.product(list(multichoose(X1.T, pld_order)), axis=1).T
-            duck('multichoose')
 
             components, _, _ = pca(f2, n_pca_terms)
             X_n = components[:, :n_pca_terms]
             X_sections.append(X_n)
 
-        duck('the higher order matrices')
         X_pld = np.concatenate(X_sections, axis=1)
 
         def build_model(mask=None, start=None):
@@ -190,7 +198,6 @@ class TransitFit(object):
                 mask = np.zeros(len(time), dtype=bool)
 
             with pm.Model() as model:
-                duck('beginning of the model')
                 # GP
                 # --------
                 diag = np.array(raw_flux_err[~mask]**2)
@@ -281,7 +288,13 @@ class TransitFit(object):
         corrected = raw_flux - star_model
         '''
 
+        # remove outliers and store the mask if it's the first fit
+        if not tlsing:
+            time, corrected, raw_flux_err, mask = self.remove_outliers(time, corrected, raw_flux_err, mask)
+            self.old_mask = mask
+
         return time, corrected, raw_flux_err
+
 
     def fit(self, x, y, yerr):
         """ """
@@ -345,7 +358,7 @@ class TransitFit(object):
                 period = pm.Deterministic("period", tt.exp(logP))
 
                 # factor * 10**logg / r_star = rho
-                factor = 5.141596357654149e-05
+                # factor = 5.141596357654149e-05
                 # rho_star = pm.Deterministic("rho_star", factor * 10**logg_star / r_star)
 
                 # Set up a Keplerian orbit for the planets
@@ -383,6 +396,7 @@ class TransitFit(object):
             static_lc = xo.utils.eval_in_model(model.light_curves, model.map_soln)
 
         return model
+
 
     def sample(self, model):
         """ """
@@ -427,6 +441,7 @@ class TransitFit(object):
         plt.title("{} initial fit".format(self.target_name))
         plt.xlim(model.x.min(), model.x.max())
         plt.legend(fontsize=10);
+
 
     def pdf_summary(self, model, light_curves, trace):
 
@@ -547,6 +562,7 @@ class TransitFit(object):
             pdf.savefig()
             plt.close()
 
+
     def new_tls_search(self, x, y, light_curves):
         """ """
 
@@ -579,7 +595,7 @@ class TransitFit(object):
                 aperture_mask = tpf._parse_aperture_mask(self.global_aperture)
             else:
                 aperture_mask = tpf._parse_aperture_mask('threshold')
-            time, flux, error = self.PyMC_PLD(tpf, mask, aperture_mask)
+            time, flux, error = self.PyMC_PLD(tpf, mask, aperture_mask, tlsing=True)
 
             x = np.append(x, time)
             y = np.append(y, flux)
@@ -588,9 +604,14 @@ class TransitFit(object):
         #normalize to 1 and rescale
         y = y * 1e-3 + 1
 
+        # remove outliers
+        y = y[~self.old_mask]
+        x = x[~self.old_mask]
+
         # remove known transit models
         for lc in light_curves[0].T:
             y = y - lc
+
 
         # build tls model, find peak signals
         model = tls(x, y)
@@ -656,8 +677,6 @@ class TransitFit(object):
 
                 pdf.savefig()
                 plt.close()
-
-
 
 @contextmanager
 def silence():
