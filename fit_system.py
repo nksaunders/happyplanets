@@ -102,7 +102,7 @@ class TransitFit(object):
 
         # download tpf
         # NOTE: only the first tpf is downloaded for now
-        tpf_collection = lk.search_targetpixelfile(self.host)[0].download_all(quality_bitmask='hardest')
+        tpf_collection = lk.search_targetpixelfile(self.host).download_all(quality_bitmask='hardest')
 
         x = np.array([], np.float64)
         y = np.array([], np.float64)
