@@ -410,7 +410,7 @@ class TransitFit(object):
         if not os.path.isdir(self.target_name):
             os.mkdir(self.target_name)
         out = pm.summary(trace)
-        out.to_csv('{}/{}_fit_parameters.csv'.format(self.target_name, self.target_name))
+        out.to_csv('outputs/{}/{}_fit_parameters.csv'.format(self.target_name, self.target_name))
 
         # compute fits for out light curves from the sampled parameters
         periods = [self.pl_period]
@@ -449,7 +449,7 @@ class TransitFit(object):
             static_lc = xo.utils.eval_in_model(model.light_curves, model.map_soln)
 
         # save informative figures to a pdf summary
-        with PdfPages('{}/{}_summary.pdf'.format(self.target_name, self.target_name)) as pdf:
+        with PdfPages('outputs/{}/{}_summary.pdf'.format(self.target_name, self.target_name)) as pdf:
 
             print('Generating summary for target {}.'.format(self.target_name))
 
