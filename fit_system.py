@@ -56,7 +56,7 @@ class TransitFit(object):
             print("full_fit: y has shape {}".format(y.shape))
             self.model = self.fit(self.x, self.y, yerr)
         model, light_curves, trace = self.sample(self.model)
-        self.new_tls_search(self.x, self.y, light_curves)
+        # self.new_tls_search(self.x, self.y, light_curves)
         self.pdf_summary(model, light_curves, trace)
 
 
@@ -252,7 +252,6 @@ class TransitFit(object):
             stellar = xo.eval_in_model(gp.predict(time), map_soln0)
             corrected = raw_flux - motion - stellar
 
-        '''
         # Optimize PLD
         with silence():
             model, map_soln, gp = build_model(mask, map_soln0)
@@ -286,15 +285,15 @@ class TransitFit(object):
         star_model = np.mean(pred_mu + pred_motion, axis=0)
         star_model_err = np.std(pred_mu + pred_motion, axis=0)
         corrected = raw_flux - star_model
-        '''
 
         # remove outliers and store the mask if it's the first fit
         if not tlsing:
             time, corrected, raw_flux_err, mask = self.remove_outliers(time, corrected, raw_flux_err, mask)
             self.old_mask = mask
 
-        return time, corrected, raw_flux_err
-
+            return time, corrected, raw_flux_err, mask
+        else:
+            return time, corrected, raw_flux_err
 
     def fit(self, x, y, yerr):
         """ """
@@ -398,14 +397,14 @@ class TransitFit(object):
         return model
 
 
-    def sample(self, model):
+    def sample(self, model, ndraws=1000):
         """ """
         # sample the model for our posterior parameters
         np.random.seed(42)
         sampler = xo.PyMC3Sampler()
         with model:
             burnin = sampler.tune(tune=250, start=model.map_soln, step_kwargs=dict(target_accept=0.9))
-            trace = sampler.sample(draws=1000)
+            trace = sampler.sample(draws=ndraws)
 
         # store outputs and save summary as a csv
         if not os.path.isdir(self.target_name):
