@@ -2,6 +2,7 @@ import sys
 import os.path
 import logging
 import warnings
+from . import PACKAGEDIR
 from contextlib import contextmanager
 from matplotlib.backends.backend_pdf import PdfPages
 
@@ -22,8 +23,6 @@ import astropy.units as unit
 from astropy.stats import sigma_clip
 from astropy.convolution import convolve, Box1DKernel
 from itertools import combinations_with_replacement as multichoose
-
-from . import PACKAGEDIR
 
 __all__ = ['TransitFit']
 
@@ -50,9 +49,10 @@ class TransitFit(object):
 
     def test_fit(self):
         """ """
-        self.x, self.y, yerr = self.detrend()
-        self.model = self.fit(self.x, self.y, yerr)
-        self.prelim_model_built = True
+        with silence():
+            self.x, self.y, yerr = self.detrend()
+            self.model = self.fit(self.x, self.y, yerr)
+            self.prelim_model_built = True
         self.preview(self.model)
 
 
