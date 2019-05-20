@@ -23,11 +23,18 @@ from astropy.stats import sigma_clip
 from astropy.convolution import convolve, Box1DKernel
 from itertools import combinations_with_replacement as multichoose
 
+from . import PACKAGEDIR
+
+__all__ = ['TransitFit']
+
 class TransitFit(object):
 
     def __init__(self, target_name=None, ind=None):
         # read in CSV file with planet parameters
-        self.kois = pd.read_csv('data/planets_2019.04.02_11.43.16.csv', skiprows=range(81))
+        datadir = os.path.abspath(os.path.join(PACKAGEDIR, os.pardir, 'data'))
+        self.kois = pd.read_csv(os.path.join(datadir,
+                                'planets_2019.04.02_11.43.16.csv'),
+                                skiprows=range(81))
 
         # set target name and find indices
         if target_name is not None:
@@ -350,10 +357,10 @@ class TransitFit(object):
 
                 # Orbital parameters
                 b = pm.Uniform("b", lower=0, upper=1, testval=0.5, shape=self.n_planets)
-                logr = pm.Normal("logr", sd=1.0, mu=np.log(r_ratio)+np.log(self.rad_star), shape=self.n_planets)
+                logr = pm.Uniform("logr", sd=5*self.rad_star_err, mu=np.log(r_ratio)+np.log(self.rad_star), shape=self.n_planets)
                 r_pl = pm.Deterministic("r_pl", tt.exp(logr))
                 rprs = pm.Deterministic("rprs", r_pl / r_star)
-                logP = pm.Normal("logP", mu=np.log(periods), sd=self.pl_period_err, shape=self.n_planets)
+                logP = pm.Uniform("logP", mu=np.log(periods), sd=5*np.log(self.pl_period_err), shape=self.n_planets)
                 period = pm.Deterministic("period", tt.exp(logP))
 
                 # factor * 10**logg / r_star = rho
