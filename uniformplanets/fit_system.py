@@ -24,7 +24,7 @@ from astropy.stats import sigma_clip
 from astropy.convolution import convolve, Box1DKernel
 from itertools import combinations_with_replacement as multichoose
 
-__all__ = ['TransitFit']
+__all__ = ['TransitFit', 'silence']
 
 class TransitFit(object):
 
