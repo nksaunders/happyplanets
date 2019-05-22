@@ -25,7 +25,7 @@ from astropy.convolution import convolve, Box1DKernel
 from itertools import combinations_with_replacement as multichoose
 
 
-class Corrector(object):
+class PLD(object):
 
     def __init__(self):
         pass

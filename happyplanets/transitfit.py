@@ -24,26 +24,20 @@ from astropy.stats import sigma_clip
 from astropy.convolution import convolve, Box1DKernel
 from itertools import combinations_with_replacement as multichoose
 
-from .utils import silence
+from .utils import download_files, silence
+from .system import System
 
 __all__ = ['TransitFit']
 
 class TransitFit(object):
 
     def __init__(self, target_name=None, ind=None):
-        # read in CSV file with planet parameters
-        datadir = os.path.abspath(os.path.join(PACKAGEDIR, os.pardir, 'data'))
-        self.kois = pd.read_csv(os.path.join(datadir,
-                                'planets_2019.04.02_11.43.16.csv'),
-                                skiprows=range(81))
+        ''' '''
 
-        # set target name and find indices
-        if target_name is not None:
-            self.target_name = target_name
-        elif ind is not None:
-            self.target_name = self.kois['pl_hostname'][ind]
-        else:
-            raise ValueError("Please specify either `target_name` or `ind`.")
+        self.system = System(target_name=target_name, ind=ind)
+        print(self.system.host)
+        self.tpf_collection = download_files(self.system.host)
 
-        self.ind = np.where(self.kois['pl_hostname'] == self.target_name)[0]
-        self.prelim_model_built = False
+    def test_fit(self):
+        ''' '''
+        pass
