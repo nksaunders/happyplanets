@@ -1,2 +1,2 @@
-# uniform-planets
-Uniform fitting of K2 planet parameters. 
+# happyplanets
+Homogeneous Analysis of Parameters with Python: Planets
