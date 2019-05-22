@@ -2,9 +2,9 @@ import os
 import sys
 from setuptools import setup
 
-setup(name='uniformplanets',
+setup(name='happyplanets',
       version='0.0.1',
-      description="Uniform Analysis of K2 Transiting Exoplanets",
+      description="Homogeneous Analysis of Parameters with Python: Planets",
       long_description="A python package to perform uniform parameter "
                        "estimates for transiting exoplanets. This software "
                        "utilizes the exoplanet, PyMC3, and lightkurve "
@@ -12,6 +12,6 @@ setup(name='uniformplanets',
       author='Nicholas Saunders',
       author_email='saunders.nk@gmail.com',
       license='MIT',
-      package_dir={'uniformplanets':'uniformplanets'},
-      packages=['uniformplanets'],
+      package_dir={'happyplanets':'happyplanets'},
+      packages=['happyplanets'],
       )
