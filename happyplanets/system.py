@@ -24,7 +24,7 @@ from astropy.stats import sigma_clip
 from astropy.convolution import convolve, Box1DKernel
 from itertools import combinations_with_replacement as multichoose
 
-from .utils import read_local_data
+from .utils import read_local_data, time_mask
 
 __all__ = ['System']
 
@@ -70,3 +70,14 @@ class System(object):
 
         self.rprs = np.array([((rp * u.jupiterRad) / (self.st_rad * u.solRad)).value
                               for rp in self.pl_rad], dtype = float)
+
+        # array of planet labels
+        self.n_planets = len(self.pl_period)
+        self.letters = "bcdefghijklmnopqrstuvwxyz"[:self.n_planets]
+
+
+    def create_planet_mask(self, t):
+        """Return cadences in t during transit given t0, period, duration."""
+        mask = []
+        for i in range(self.n_planets):
+            mask |= time_mask(t, self.pl_t0[i], self.pl_period[i], 0.3)

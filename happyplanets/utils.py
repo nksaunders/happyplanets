@@ -24,30 +24,11 @@ from astropy.stats import sigma_clip
 from astropy.convolution import convolve, Box1DKernel
 from itertools import combinations_with_replacement as multichoose
 
-@contextmanager
-def silence():
-    '''Suppreses all output'''
-    logger = logging.getLogger()
-    logger.disabled = True
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        with open(os.devnull, "w") as devnull:
-            old_stdout = sys.stdout
-            sys.stdout = devnull
-            try:
-                yield
-            finally:
-                sys.stdout = old_stdout
 
-
-def download_files(target_name):
-    ''' '''
-
-    search_result = lk.search_targetpixelfile(target_name)
-    tpf_collection = search_result.download_all(quality_bitmask='hardest')
-
-    return tpf_collection
-
+def time_mask(t, t0, period, duration):
+    """Return cadences in t during transit given t0, period, duration."""
+    hp = 0.5*period
+    return np.abs((t-t0+hp) % period - hp) < 0.5*duration
 
 
 def read_local_data(target_name=None, ind=None):
@@ -66,3 +47,19 @@ def read_local_data(target_name=None, ind=None):
     ind = np.where(kois['pl_hostname'] == target_name)[0]
 
     return kois.iloc[ind]
+
+
+@contextmanager
+def silence():
+    '''Suppreses all output'''
+    logger = logging.getLogger()
+    logger.disabled = True
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        with open(os.devnull, "w") as devnull:
+            old_stdout = sys.stdout
+            sys.stdout = devnull
+            try:
+                yield
+            finally:
+                sys.stdout = old_stdout
