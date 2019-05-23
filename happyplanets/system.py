@@ -78,6 +78,7 @@ class System(object):
 
     def create_planet_mask(self, t):
         """Return cadences in t during transit given t0, period, duration."""
-        mask = []
+        mask = np.zeros_like(t, dtype=bool)
         for i in range(self.n_planets):
             mask |= time_mask(t, self.pl_t0[i], self.pl_period[i], 0.3)
+        return mask
