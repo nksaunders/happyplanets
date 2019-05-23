@@ -42,6 +42,19 @@ def PyMC_PLD(tpf, system, planet_mask, aperture, sigma=5, ndraws=1000, pld_order
     raw_flux /= np.median(raw_flux)
     raw_flux -= 1
 
+    # create nan mask
+    nanmask = np.isfinite(tpf.time)
+    nanmask &= np.isfinite(raw_flux)
+    nanmask &= np.isfinite(raw_flux_err)
+    nanmask &= np.abs(raw_flux_err) > 1e-12
+
+    # mask out nan values
+    raw_flux = raw_flux[nanmask]
+    raw_flux_err = raw_flux_err[nanmask]
+    flux = flux[nanmask]
+    flux_err = flux_err[nanmask]
+    time = time[nanmask]
+
     # Setting to Parts Per Thousand keeps us from hitting machine precision errors...
     raw_flux *= 1e3
     raw_flux_err *= 1e3
