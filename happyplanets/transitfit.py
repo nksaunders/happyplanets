@@ -32,12 +32,162 @@ __all__ = ['TransitFit']
 
 class TransitFit(object):
 
-    def __init__(self, target_name=None, ind=None):
+    def __init__(self, target_name=None, ind=None, n_obs='all'):
         ''' '''
 
         self.system = System(target_name=target_name, ind=ind)
-        self.lightcurve = LightCurve(self.system.host, self.system).return_lightcurve()
+        self.target_name = self.system.host
+        self.lightcurve = LightCurve(self.target_name, self.system).return_lightcurve(n_obs)
+
 
     def test_fit(self):
         ''' '''
-        pass
+        model = self.fit(self.lightcurve.time, self.lightcurve.flux, self.lightcurve.flux_err)
+        self.preview(model)
+
+    def fit(self, x, y, yerr):
+        ''' '''
+
+        def build_model(x, y, yerr, period_prior, t0_prior, rprs_prior, mask=None, start=None):
+            """Build an exoplanet model for a dataset and set of planets
+
+            Args:
+                x: The time series (in days); this should probably be centered
+                y: The relative fluxes (in parts per thousand)
+                yerr: The uncertainties on ``y``
+                period_prior: The periods of the planets (in days)
+                t0_prior: The phases of the planets in the same coordinates as ``x``
+                depths: The depths of the transits in parts per thousand
+                mask: A boolean mask with the same shape as ``x`` indicating which
+                    data points should be included in the fit
+                start: A dictionary of model parameters where the optimization
+                    should be initialized
+
+            Returns:
+                A PyMC3 model specifying the probabilistic model for the light curve
+
+            """
+
+            if mask is None:
+                mask = np.ones(len(x), dtype=bool)
+
+            period_prior = np.atleast_1d(period_prior)
+            t0_prior = np.atleast_1d(t0_prior)
+            rprs_prior = np.atleast_1d(rprs_prior)
+
+            with pm.Model() as model:
+
+                # Extract the un-masked data points
+                model.x = x[mask]
+                model.y = y[mask]
+                model.yerr = (yerr + np.zeros_like(x))[mask]
+                model.mask = mask
+
+                # The baseline (out-of-transit) flux for the star in ppt
+                mean = pm.Normal("mean",
+                                 mu=0.0,
+                                 sd=10.0)
+
+                r_star = pm.Normal("r_star",
+                                   mu=self.system.st_rad,
+                                   sd=self.system.st_rad_err1)
+
+                m_star = pm.Normal("m_star",
+                                   mu=self.system.st_mass,
+                                   sd=self.system.st_mass_err1)
+
+                # Prior to require physical parameters
+                pm.Potential("r_star_prior", tt.switch(r_star > 0, 0, -np.inf))
+
+                # The time of a reference transit for each planet
+                t0 = pm.Normal("t0", mu=t0_prior, sd=self.system.pl_t0_err1, shape=self.system.n_planets)
+
+                # quadratic limb darkening paramters
+                u = xo.distributions.QuadLimbDark("u")
+
+                # Orbital parameters
+                b = pm.Uniform("b",
+                               lower=0,
+                               upper=1,
+                               testval=0.5,
+                               shape=self.system.n_planets)
+
+                r_pl = pm.Uniform("r_pl",
+                                  testval=rprs_prior*self.system.st_rad,
+                                  lower=rprs_prior*self.system.st_rad-(4*self.system.st_rad_err1),
+                                  upper=rprs_prior*self.system.st_rad+(4*self.system.st_rad_err2),
+                                  shape=self.system.n_planets)
+
+                rprs = pm.Deterministic("rprs", r_pl / r_star)
+
+                period = pm.Uniform("period",
+                                    testval=period_prior,
+                                    lower=period_prior-2*self.system.pl_period_err1,
+                                    upper=period_prior+2*self.system.pl_period_err2,
+                                    shape=self.system.n_planets)
+
+                # factor * 10**logg / r_star = rho
+                # factor = 5.141596357654149e-05
+                # rho_star = pm.Deterministic("rho_star", factor * 10**logg_star / r_star)
+                # logg_star = pm.Normal("logg_star", mu=logg, sd=logg_err)
+
+                # Set up a Keplerian orbit for the planets
+                model.orbit = xo.orbits.KeplerianOrbit(
+                    period=period, t0=t0, b=b, r_star=r_star, m_star=m_star)# rho_star=rho_star)
+
+                # Compute the model light curve using starry
+                model.light_curves = xo.StarryLightCurve(u).get_light_curve(
+                                        orbit=model.orbit, r=r_pl, t=model.x)
+
+                model.light_curve = pm.math.sum(model.light_curves, axis=-1) * 1e3 + mean
+
+                # Jitter and likelihood function
+                logs2 = pm.Normal("logs2",
+                                  mu=np.log(np.mean(model.yerr)),
+                                  sd=10)
+
+                pm.Normal("obs",
+                          mu=model.light_curve,
+                          sd=tt.sqrt(model.yerr**2+tt.exp(logs2)),
+                          observed=model.y)
+
+                # Fit for the maximum a posteriori parameters, I've found that I can get
+                # a better solution by trying different combinations of parameters in turn
+                if start is None:
+                    start = model.test_point
+                map_soln = xo.optimize(start=start, vars=[period, t0])
+                map_soln = xo.optimize(start=map_soln, vars=[rprs, mean])
+                map_soln = xo.optimize(start=map_soln, vars=[r_star])
+                map_soln = xo.optimize(start=map_soln, vars=[period, t0, mean])
+                map_soln = xo.optimize(start=map_soln, vars=[rprs, mean])
+                map_soln = xo.optimize(start=map_soln)
+                model.map_soln = map_soln
+
+            return model
+
+        # build our initial model and store a static version of the output for plotting
+        model = build_model(x, y, yerr, self.system.pl_period, self.system.pl_t0, self.system.rprs)
+        with model:
+            mean = model.map_soln["mean"]
+            static_lc = xo.utils.eval_in_model(model.light_curves, model.map_soln)
+
+        return model
+
+
+    def preview(self, model):
+        """ """
+        '''Plot the initial fit.'''
+
+        with model:
+            mean = model.map_soln["mean"]
+            static_lc = xo.utils.eval_in_model(model.light_curves, model.map_soln)
+
+        plt.figure(figsize=(10,4))
+        plt.plot(model.x, model.y - mean, "k.", label="data")
+        for n, l in enumerate(self.system.letters):
+            plt.plot(model.x, 1e3*static_lc[:, n], label="planet {0}".format(l), zorder=100-n)
+        plt.xlabel("time [days]")
+        plt.ylabel("flux [ppt]")
+        plt.title("{} initial fit".format(self.target_name))
+        plt.xlim(model.x.min(), model.x.max())
+        plt.legend(fontsize=10);
