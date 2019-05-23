@@ -24,7 +24,7 @@ from astropy.stats import sigma_clip
 from astropy.convolution import convolve, Box1DKernel
 from itertools import combinations_with_replacement as multichoose
 
-from .lightcurve import download_files
+from .lightcurve import LightCurve
 from .system import System
 from .utils import silence
 
@@ -36,7 +36,7 @@ class TransitFit(object):
         ''' '''
 
         self.system = System(target_name=target_name, ind=ind)
-        self.tpf_collection = download_files(self.system.host)
+        self.lightcurve = LightCurve(self.system.host, self.system).return_lightcurve()
 
     def test_fit(self):
         ''' '''
