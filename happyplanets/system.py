@@ -65,8 +65,8 @@ class System(object):
         self.st_mass_err2 = np.atleast_1d(row['st_masserr2'])[0]
 
         self.st_rad = np.atleast_1d(row['st_rad'])[0]
-        self.rad_star_err1 = np.atleast_1d(row['st_raderr1'])[0]
-        self.rad_star_err2 = np.atleast_1d(row['st_raderr2'])[0]
+        self.st_rad_err1 = np.atleast_1d(row['st_raderr1'])[0]
+        self.st_rad_err2 = np.atleast_1d(row['st_raderr2'])[0]
 
         self.rprs = np.array([((rp * u.jupiterRad) / (self.st_rad * u.solRad)).value
                               for rp in self.pl_rad], dtype = float)
