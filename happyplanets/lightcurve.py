@@ -36,10 +36,10 @@ class LightCurve(object):
         self.global_aperture = 'pipeline'
 
 
-    def return_lightcurve(self):
+    def return_lightcurve(self, n_obs='all'):
         ''' '''
 
-        tpf_collection = self.download_files(self.target_name)
+        tpf_collection = self.download_files(self.target_name, n_obs)
         return self.detrend(tpf_collection)
 
 
@@ -75,10 +75,13 @@ class LightCurve(object):
         return lc
 
 
-    def download_files(self, target_name):
+    def download_files(self, target_name, n_obs='all'):
         ''' '''
 
         search_result = lk.search_targetpixelfile(target_name)
-        tpf_collection = search_result.download_all(quality_bitmask='hardest')
+        if n_obs == 'all':
+            tpf_collection = search_result.download_all(quality_bitmask='hardest')
+        else:
+            tpf_collection = search_result[:n_obs].download_all(quality_bitmask='hardest')
 
         return tpf_collection
