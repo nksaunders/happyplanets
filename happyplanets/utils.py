@@ -51,7 +51,7 @@ def read_local_data(target_name=None, ind=None):
 
 @contextmanager
 def silence():
-    '''Suppreses all output'''
+    """Suppresses all output."""
     logger = logging.getLogger()
     logger.disabled = True
     with warnings.catch_warnings():
