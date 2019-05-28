@@ -24,31 +24,35 @@ from astropy.stats import sigma_clip
 from astropy.convolution import convolve, Box1DKernel
 from itertools import combinations_with_replacement as multichoose
 
-from .lightcurve import LightCurve
-from .system import System
+from .timeseries import TimeSeries
+from .planetsystem import PlanetSystem
 from .utils import silence
 
-__all__ = ['TransitFit']
+__all__ = ['TransitFitter']
 
-class TransitFit(object):
+class TransitFitter(object):
+    """ """
 
     def __init__(self, target_name=None, ind=None, n_obs='all'):
-        ''' '''
 
-        self.system = System(target_name=target_name, ind=ind)
+        self.system = PlanetSystem(target_name=target_name, ind=ind)
         self.target_name = self.system.host
-        self.lightcurve = LightCurve(self.target_name, self.system).return_lightcurve(n_obs)
+        self.lightcurve = TimeSeries(self.target_name, self.system).return_lightcurve(n_obs)
 
 
     def test_fit(self):
-        ''' '''
+        """ """
         model = self.fit(self.lightcurve.time, self.lightcurve.flux, self.lightcurve.flux_err)
         self.preview(model)
 
-    def fit(self, x, y, yerr):
-        ''' '''
 
-        def build_model(x, y, yerr, period_prior, t0_prior, rprs_prior, mask=None, start=None):
+    def fit(self, x, y, yerr):
+        """ """
+
+        # build_model should only take lc and system
+        # model = build_model(lc, system)
+
+        def build_model(x, y, yerr, period_prior, t0_prior, rprs_prior, start=None):
             """Build an exoplanet model for a dataset and set of planets
 
             Args:
@@ -58,8 +62,6 @@ class TransitFit(object):
                 period_prior: The periods of the planets (in days)
                 t0_prior: The phases of the planets in the same coordinates as ``x``
                 depths: The depths of the transits in parts per thousand
-                mask: A boolean mask with the same shape as ``x`` indicating which
-                    data points should be included in the fit
                 start: A dictionary of model parameters where the optimization
                     should be initialized
 
@@ -68,20 +70,16 @@ class TransitFit(object):
 
             """
 
-            if mask is None:
-                mask = np.ones(len(x), dtype=bool)
-
             period_prior = np.atleast_1d(period_prior)
             t0_prior = np.atleast_1d(t0_prior)
             rprs_prior = np.atleast_1d(rprs_prior)
 
             with pm.Model() as model:
 
-                # Extract the un-masked data points
-                model.x = x[mask]
-                model.y = y[mask]
-                model.yerr = (yerr + np.zeros_like(x))[mask]
-                model.mask = mask
+                # Set model variables
+                model.x = x
+                model.y = y
+                model.yerr = (yerr + np.zeros_like(x))
 
                 # The baseline (out-of-transit) flux for the star in ppt
                 mean = pm.Normal("mean",
@@ -97,10 +95,14 @@ class TransitFit(object):
                                    sd=self.system.st_mass_err1)
 
                 # Prior to require physical parameters
-                pm.Potential("r_star_prior", tt.switch(r_star > 0, 0, -np.inf))
+                pm.Potential("r_star_prior",
+                             tt.switch(r_star > 0, 0, -np.inf))
 
                 # The time of a reference transit for each planet
-                t0 = pm.Normal("t0", mu=t0_prior, sd=self.system.pl_t0_err1, shape=self.system.n_planets)
+                t0 = pm.Normal("t0",
+                               mu=t0_prior,
+                               sd=self.system.pl_t0_err1,
+                               shape=self.system.n_planets)
 
                 # quadratic limb darkening paramters
                 u = xo.distributions.QuadLimbDark("u")
@@ -114,16 +116,16 @@ class TransitFit(object):
 
                 r_pl = pm.Uniform("r_pl",
                                   testval=rprs_prior*self.system.st_rad,
-                                  lower=rprs_prior*self.system.st_rad-(4*self.system.st_rad_err1),
-                                  upper=rprs_prior*self.system.st_rad+(4*self.system.st_rad_err2),
+                                  lower=rprs_prior*self.system.st_rad+(3*self.system.st_rad_err2),
+                                  upper=rprs_prior*self.system.st_rad+(3*self.system.st_rad_err1),
                                   shape=self.system.n_planets)
 
                 rprs = pm.Deterministic("rprs", r_pl / r_star)
 
                 period = pm.Uniform("period",
                                     testval=period_prior,
-                                    lower=period_prior-2*self.system.pl_period_err1,
-                                    upper=period_prior+2*self.system.pl_period_err2,
+                                    lower=period_prior+3*self.system.pl_period_err2,
+                                    upper=period_prior+3*self.system.pl_period_err1,
                                     shape=self.system.n_planets)
 
                 # factor * 10**logg / r_star = rho
@@ -175,8 +177,7 @@ class TransitFit(object):
 
 
     def preview(self, model):
-        """ """
-        '''Plot the initial fit.'''
+        """Plot the initial fit."""
 
         with model:
             mean = model.map_soln["mean"]
@@ -185,7 +186,7 @@ class TransitFit(object):
         plt.figure(figsize=(10,4))
         plt.plot(model.x, model.y - mean, "k.", label="data")
         for n, l in enumerate(self.system.letters):
-            plt.plot(model.x, 1e3*static_lc[:, n], label="planet {0}".format(l), zorder=100-n)
+            plt.plot(model.x, 1e3 * static_lc[:, n], label="planet {0}".format(l), zorder=100-n)
         plt.xlabel("time [days]")
         plt.ylabel("flux [ppt]")
         plt.title("{} initial fit".format(self.target_name))
