@@ -25,24 +25,51 @@ from astropy.convolution import convolve, Box1DKernel
 from itertools import combinations_with_replacement as multichoose
 
 from .utils import read_local_data, time_mask
+from .planet import Planet
 
-__all__ = ['System']
+__all__ = ['PlanetSystem']
 
 
-class System(object):
+class PlanetSystem(object):
+    """ """
 
-    def __init__(self, target_name=None, ind=None):
-        ''' '''
+    def __init__(self, target_name=None, ind=None, star=None, planets=[]):
 
         self.target_name = target_name
         self.ind = ind
+        self.star = star # to be made into a class later
+        self.planets = planets # samesies
         self.fetch_parameters()
 
+    def __repr__(self):
+
+        dict = {'n Planets':self.n_planets,
+                'Host Name':self.target_name,
+                'Period':self.pl_period,
+                'Period err1':self.pl_period_err1,
+                'Period err2':self.pl_period_err2,
+                't0':self.pl_t0,
+                't0 err1':self.pl_t0_err1,
+                't0 err2':self.pl_t0_err2,
+                'Planet Radius':self.pl_rad,
+                'Planet Radius err1':self.pl_rad_err1,
+                'Planet Radius err2':self.pl_rad_err2,
+                'Stellar Radius':self.st_rad,
+                'Stellar Radius err1':self.st_rad_err1,
+                'Stellar Radius err2':self.st_rad_err2,
+                'Stellar Mass':self.st_mass,
+                'Stellar Mass err1':self.st_mass_err1,
+                'Stellar Mass err2':self.st_mass_err2,
+                'Rp/Rs':self.rprs}
+
+        return pd.DataFrame(dict).T.__repr__()
+
+
     def fetch_parameters(self):
-        ''' '''
+        """ """
 
         # read in corresponding rows from local csv data file
-        row = read_local_data(target_name=self.target_name, ind=self.ind)
+        row = read_local_data(target_name=self.target_name)
 
         # store planet parameters
         self.host = np.atleast_1d(row['pl_hostname'])[0]
