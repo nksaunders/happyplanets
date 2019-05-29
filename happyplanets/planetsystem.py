@@ -36,14 +36,8 @@ class PlanetSystem(object):
 
     def __init__(self, target_name=None, ind=None, star=None, planets=[]):
 
-        self.target_name = target_name
-        self.ind = ind
-        rows = read_local_data(target_name=target_name, ind=ind)
-
-        # make star and planet objects
-        self.star = self.build_star(rows)
-        self.planets = self.build_planets(rows, self.star)
-        self.host = self.star.host
+        self.star = star
+        self.planets = planets
 
         # array of planet labels
         self.n_planets = len(self.planets)
@@ -128,3 +122,15 @@ class PlanetSystem(object):
         for p in self.planets:
             mask |= time_mask(t, p.pl_t0.value, p.pl_period.value, n_dur_mask*p.duration.value)
         return mask
+
+
+def create_planet_system(target_name):
+    """ """
+    rows = read_local_data(target_name=target_name)
+    star = Star(rows)
+
+    planets = []
+    for i in range(len(rows)):
+        planets.append(Planet(rows.iloc[i], star))
+
+    return PlanetSystem(star=star, planets=planets)
