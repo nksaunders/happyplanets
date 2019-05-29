@@ -39,9 +39,8 @@ class TimeSeries(object):
 
     def return_lightcurve(self, n_obs='all'):
         """ """
-
-        tpf_collection = self.download_files(self.target_name, n_obs)
-        return self.detrend(tpf_collection)
+        self.tpf_collection = self.download_files(self.target_name, n_obs)
+        return self.detrend(self.tpf_collection)
 
 
     def detrend(self, tpf_collection):
