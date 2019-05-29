@@ -35,7 +35,7 @@ class Star(object):
         """Store parameters read in from row."""
 
         # store stellar parameters
-        self.host = np.atleast_1d(row['pl_hostname'])[0]
+        self.hostname = np.atleast_1d(row['pl_hostname'])[0]
         self.st_mass = np.atleast_1d(row['st_mass'])[0] * u.solMass
         self.st_mass_err1 = np.atleast_1d(row['st_masserr1'])[0] * u.solMass
         self.st_mass_err2 = np.atleast_1d(row['st_masserr2'])[0] * u.solMass
