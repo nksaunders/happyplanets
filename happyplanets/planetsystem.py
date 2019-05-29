@@ -26,6 +26,7 @@ from itertools import combinations_with_replacement as multichoose
 
 from .utils import read_local_data, time_mask
 from .planet import Planet
+from .star import Star
 
 __all__ = ['PlanetSystem']
 
@@ -39,7 +40,7 @@ class PlanetSystem(object):
         self.ind = ind
         self.star = star # to be made into a class later
         self.planets = planets # samesies
-        self.fetch_parameters()
+        self._fetch_parameters()
 
     def __repr__(self):
 
@@ -65,7 +66,7 @@ class PlanetSystem(object):
         return pd.DataFrame(dict).T.__repr__()
 
 
-    def fetch_parameters(self):
+    def _fetch_parameters(self):
         """ """
 
         # read in corresponding rows from local csv data file
@@ -82,7 +83,7 @@ class PlanetSystem(object):
         self.pl_t0_err1 = np.array(row['pl_tranmiderr1'], dtype=float)
         self.pl_t0_err2 = np.array(row['pl_tranmiderr2'], dtype=float)
 
-        self.pl_rad = np.array(row['pl_radj'], dtype=float)
+        self.pl_rad = np.array(row['pl_radj'], dtype=float) / 11.21
         self.pl_rad_err1 = np.array(row['pl_radjerr1'], dtype=float)
         self.pl_rad_err2 = np.array(row['pl_radjerr2'], dtype=float)
 
@@ -102,6 +103,13 @@ class PlanetSystem(object):
         self.n_planets = len(self.pl_period)
         self.letters = "bcdefghijklmnopqrstuvwxyz"[:self.n_planets]
 
+
+    def build_star(self):
+        """Instantiate a Star object with read in parameters."""
+        star = Star(radius=self.st_rad, radius_err=[self.st_rad_err1, self.st_rad_err2],
+                     mass=self.st_mass, mass_err=[self.st_mass_err1, self.st_mass_err2])
+
+        return star
 
     def create_planet_mask(self, t):
         """Return cadences in t during transit given t0, period, duration."""
