@@ -121,25 +121,25 @@ class Corrector(object):
             with pm.Model() as model:
                 # GP
                 # --------
-                diag = np.array(raw_flux_err[~mask]**2)
-                # diag[mask] += 1e12 # Temporarily increase the in-transit error bars
-                logs2 = pm.Normal("logs2", mu=np.log(np.var(raw_flux[~mask])), sd=4)
-                logsigma = pm.Normal("logsigma", mu=np.log(np.std(raw_flux[~mask])), sd=4)
+                diag = np.array(raw_flux_err**2)
+                diag[mask] += 1e12 # Temporarily increase the in-transit error bars
+                logs2 = pm.Normal("logs2", mu=np.log(np.var(raw_flux)), sd=4)
+                logsigma = pm.Normal("logsigma", mu=np.log(np.std(raw_flux)), sd=4)
                 logrho = pm.Normal("logrho", mu=np.log(150), sd=4)
 
                 kernel = xo.gp.terms.Matern32Term(log_sigma=logsigma, log_rho=logrho)
-                gp = xo.gp.GP(kernel, time[~mask], diag + tt.exp(logs2))
+                gp = xo.gp.GP(kernel, time, diag + tt.exp(logs2))
 
                 # Motion model
                 #------------------
-                A = tt.dot(X_pld[~mask].T, gp.apply_inverse(X_pld[~mask]))
-                B = tt.dot(X_pld[~mask].T, gp.apply_inverse(raw_flux[~mask][:, None]))
+                A = tt.dot(X_pld.T, gp.apply_inverse(X_pld))
+                B = tt.dot(X_pld.T, gp.apply_inverse(raw_flux[:, None]))
                 C = tt.slinalg.solve(A, B)
-                motion_model = pm.Deterministic("motion_model", tt.dot(X_pld[~mask], C)[:, 0])
+                motion_model = pm.Deterministic("motion_model", tt.dot(X_pld, C)[:, 0])
 
                 # Likelihood
                 #------------------
-                pm.Potential("obs", gp.log_likelihood(raw_flux[~mask] - motion_model))
+                pm.Potential("obs", gp.log_likelihood(raw_flux - motion_model))
 
                 # gp predicted flux
                 gp_pred = gp.predict()
@@ -170,6 +170,13 @@ class Corrector(object):
             motion = np.dot(X_pld, map_soln0['weights']).reshape(-1)
             stellar = xo.eval_in_model(gp.predict(time), map_soln0)
             corrected = raw_flux - motion - stellar
+
+        self.diagnostics = {'raw_flux':raw_flux, 'motion':motion,
+                            'stellar':stellar, 'transit mask':mask,
+                            'gp':gp, 'map_soln0':map_soln0, 'time':time}
+
+        # return variable `Diagnostics` (dictionary)
+        # diagnostic: plot raw, motion, stellar
 
         '''
         # Optimize PLD
@@ -214,3 +221,19 @@ class Corrector(object):
         return time, corrected, raw_flux_err, gp
         # else:
         #     return time, corrected, raw_flux_err, gp
+
+    def plot_diagnostics(self):
+
+        time = self.diagnostics['time']
+        raw_flux = self.diagnostics['raw_flux']
+        motion_model = self.diagnostics['motion']
+
+        raw_lc = lk.LightCurve(time=time, flux=raw_flux)
+        motion_lc = lk.LightCurve(time=time, flux=motion_model)
+        stellar_lc = lk.LightCurve(time=time, flux=self.diagnostics['stellar'])
+
+        ax = raw_lc.scatter(normalize=False)
+        motion_lc.scatter(ax=ax, normalize=False)
+        stellar_lc.scatter(ax=ax, normalize=False)
+
+        return ax
