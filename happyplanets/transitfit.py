@@ -26,6 +26,7 @@ from itertools import combinations_with_replacement as multichoose
 
 from .timeseries import TimeSeries
 from .planetsystem import PlanetSystem
+from .plotting import preview, pdf_summary
 from .utils import silence
 
 __all__ = ['TransitFitter']
@@ -37,14 +38,25 @@ class TransitFitter(object):
 
         self.system = PlanetSystem(target_name=target_name, ind=ind)
         self.target_name = self.system.host
-        self.lightcurve = TimeSeries(self.target_name, self.system).return_lightcurve(n_obs)
+        self.timeseries = TimeSeries(self.target_name, self.system)
+        self.lightcurve = self.timeseries.return_lightcurve(n_obs)
+        self._initial_fit_generated = False
 
 
     def test_fit(self):
-        """ """
-        model = self.fit(self.lightcurve.time, self.lightcurve.flux, self.lightcurve.flux_err)
-        self.preview(model)
+        """Optimize parameters with PyMC3 and plot initial fit."""
+        self.model = self.fit(self.lightcurve.time, self.lightcurve.flux, self.lightcurve.flux_err)
+        self._initial_fit_generated = True
+        preview(self.model, self.system, self.target_name)
 
+
+    def full_fit(self):
+        """Optimize parameters, sample posteriors, and generate a pdf summary of
+        results."""
+        if not self._initial_fit_generated:
+            self.model = self.fit(self.lightcurve.time, self.lightcurve.flux, self.lightcurve.flux_err)
+        model, light_curves, trace = self.sample(self.model)
+        pdf_summary(model, light_curves, trace, self.system, self.timeseries, self.target_name)
 
     def fit(self, x, y, yerr):
         """ """
@@ -176,19 +188,29 @@ class TransitFitter(object):
         return model
 
 
-    def preview(self, model):
-        """Plot the initial fit."""
-
+    def sample(self, model, ndraws=1000):
+        """Sample the posterior from optimization."""
+        # sample the model for our posterior parameters
+        np.random.seed(42)
+        sampler = xo.PyMC3Sampler()
         with model:
-            mean = model.map_soln["mean"]
-            static_lc = xo.utils.eval_in_model(model.light_curves, model.map_soln)
+            burnin = sampler.tune(tune=250, start=model.map_soln, step_kwargs=dict(target_accept=0.9))
+            trace = sampler.sample(draws=ndraws)
 
-        plt.figure(figsize=(10,4))
-        plt.plot(model.x, model.y - mean, "k.", label="data")
-        for n, l in enumerate(self.system.letters):
-            plt.plot(model.x, 1e3 * static_lc[:, n], label="planet {0}".format(l), zorder=100-n)
-        plt.xlabel("time [days]")
-        plt.ylabel("flux [ppt]")
-        plt.title("{} initial fit".format(self.target_name))
-        plt.xlim(model.x.min(), model.x.max())
-        plt.legend(fontsize=10);
+        # store outputs and save summary as a csv
+        output_dir = os.path.join(PACKAGEDIR, os.pardir, 'outputs', self.target_name)
+        if not os.path.isdir(output_dir):
+            os.mkdir(output_dir)
+        out = pm.summary(trace)
+        out.to_csv(os.path.join(output_dir, '{}_fit_parameters.csv'.format(self.target_name)))
+
+        # compute fits for out light curves from the sampled parameters
+        periods = [self.system.pl_period]
+        with model:
+            light_curves = np.empty((500, len(model.x), len(self.system.pl_period)))
+            func = xo.utils.get_theano_function_for_var(model.light_curves)
+            for i, sample in enumerate(xo.utils.get_samples_from_trace(
+                    trace, size=len(light_curves))):
+                light_curves[i] = func(*xo.utils.get_args_for_theano_function(sample))
+
+        return model, light_curves, trace
