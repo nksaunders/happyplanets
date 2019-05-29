@@ -28,7 +28,7 @@ from .correct import Corrector
 
 
 class TimeSeries(object):
-    """ """
+    """A time series photometric observation of a K2 target."""
 
     def __init__(self, target_name, system):
 
