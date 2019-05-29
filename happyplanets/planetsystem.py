@@ -121,10 +121,10 @@ class PlanetSystem(object):
         return planets
 
 
-    def create_planet_mask(self, t):
+    def create_planet_mask(self, t, n_dur_mask=2):
         """Return cadences in t during transit given t0, period, duration."""
 
         mask = np.zeros_like(t, dtype=bool)
         for p in self.planets:
-            mask |= time_mask(t, p.pl_t0.value, p.pl_period.value, p.duration.value)
+            mask |= time_mask(t, p.pl_t0.value, p.pl_period.value, n_dur_mask*p.duration.value)
         return mask
