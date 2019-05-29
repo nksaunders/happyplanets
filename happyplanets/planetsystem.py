@@ -38,14 +38,23 @@ class PlanetSystem(object):
 
         self.target_name = target_name
         self.ind = ind
-        self.star = star # to be made into a class later
-        self.planets = planets # samesies
-        self._fetch_parameters()
+        rows = read_local_data(target_name=target_name, ind=ind)
+
+        # make star and planet objects
+        self.star = self.build_star(rows)
+        self.planets = self.build_planets(rows, self.star)
+        self.host = self.star.host
+
+        # array of planet labels
+        self.n_planets = len(self.planets)
+        self.letters = "bcdefghijklmnopqrstuvwxyz"[:self.n_planets]
+        self.fetch_parameters()
+
 
     def __repr__(self):
 
         dict = {'n Planets':self.n_planets,
-                'Host Name':self.target_name,
+                'Host Name':self.host,
                 'Period':self.pl_period,
                 'Period err1':self.pl_period_err1,
                 'Period err2':self.pl_period_err2,
@@ -66,54 +75,56 @@ class PlanetSystem(object):
         return pd.DataFrame(dict).T.__repr__()
 
 
-    def _fetch_parameters(self):
-        """ """
+    def fetch_parameters(self):
+        """Store stellar and planetary parameters as variables of PlanetSystem."""
 
-        # read in corresponding rows from local csv data file
-        row = read_local_data(target_name=self.target_name)
+        self.pl_period = np.array([p.pl_period.value for p in self.planets])
+        self.pl_period_err1 = np.array([p.pl_period_err1.value for p in self.planets])
+        self.pl_period_err2 = np.array([p.pl_period_err2.value for p in self.planets])
 
-        # store planet parameters
-        self.host = np.atleast_1d(row['pl_hostname'])[0]
+        self.pl_t0 = np.array([p.pl_t0.value for p in self.planets])
+        self.pl_t0_err1 = np.array([p.pl_t0_err1.value for p in self.planets])
+        self.pl_t0_err2 = np.array([p.pl_t0_err2.value for p in self.planets])
 
-        self.pl_period = np.array(row['pl_orbper'], dtype=float)
-        self.pl_period_err1 = np.array(row['pl_orbpererr1'], dtype=float)
-        self.pl_period_err2 = np.array(row['pl_orbpererr2'], dtype=float)
+        self.pl_rad = np.array([p.pl_rad.value for p in self.planets])
+        self.pl_rad_err1 = np.array([p.pl_rad_err1.value for p in self.planets])
+        self.pl_rad_err2 = np.array([p.pl_rad_err2.value for p in self.planets])
 
-        self.pl_t0 = np.array(row['pl_tranmid'], dtype=float) - 2454833 # JD -> BKJD
-        self.pl_t0_err1 = np.array(row['pl_tranmiderr1'], dtype=float)
-        self.pl_t0_err2 = np.array(row['pl_tranmiderr2'], dtype=float)
-
-        self.pl_rad = np.array(row['pl_radj'], dtype=float) / 11.21
-        self.pl_rad_err1 = np.array(row['pl_radjerr1'], dtype=float)
-        self.pl_rad_err2 = np.array(row['pl_radjerr2'], dtype=float)
+        self.rprs = np.array([p.rprs for p in self.planets])
+        self.rprs_err1 = np.array([p.rprs_err1 for p in self.planets])
+        self.rprs_err2 = np.array([p.rprs_err2 for p in self.planets])
 
         # store stellar parameters
-        self.st_mass = np.atleast_1d(row['st_mass'])[0]
-        self.st_mass_err1 = np.atleast_1d(row['st_masserr1'])[0]
-        self.st_mass_err2 = np.atleast_1d(row['st_masserr2'])[0]
+        self.st_mass = self.star.st_mass.value
+        self.st_mass_err1 = self.star.st_mass_err1.value
+        self.st_mass_err2 = self.star.st_mass_err2.value
 
-        self.st_rad = np.atleast_1d(row['st_rad'])[0]
-        self.st_rad_err1 = np.atleast_1d(row['st_raderr1'])[0]
-        self.st_rad_err2 = np.atleast_1d(row['st_raderr2'])[0]
-
-        self.rprs = np.array([((rp * u.jupiterRad) / (self.st_rad * u.solRad)).value
-                              for rp in self.pl_rad], dtype = float)
-
-        # array of planet labels
-        self.n_planets = len(self.pl_period)
-        self.letters = "bcdefghijklmnopqrstuvwxyz"[:self.n_planets]
+        self.st_rad = self.star.st_rad.value
+        self.st_rad_err1 = self.star.st_rad_err1.value
+        self.st_rad_err2 = self.star.st_rad_err2.value
 
 
-    def build_star(self):
-        """Instantiate a Star object with read in parameters."""
-        star = Star(radius=self.st_rad, radius_err=[self.st_rad_err1, self.st_rad_err2],
-                     mass=self.st_mass, mass_err=[self.st_mass_err1, self.st_mass_err2])
+    def build_star(self, rows):
+        """Instantiate a Star object."""
 
-        return star
+        return Star(rows)
+
+
+    def build_planets(self, rows, host):
+        """Instantiate a Planet object for each row containing the host star."""
+
+        planets = []
+
+        for i in range(len(rows)):
+            planets.append(Planet(rows.iloc[i], host))
+
+        return planets
+
 
     def create_planet_mask(self, t):
         """Return cadences in t during transit given t0, period, duration."""
+
         mask = np.zeros_like(t, dtype=bool)
-        for i in range(self.n_planets):
-            mask |= time_mask(t, self.pl_t0[i], self.pl_period[i], 0.3)
+        for p in self.planets:
+            mask |= time_mask(t, p.pl_t0.value, p.pl_period.value, p.duration.value)
         return mask
