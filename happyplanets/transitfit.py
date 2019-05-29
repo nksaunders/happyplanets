@@ -136,8 +136,8 @@ class TransitFitter(object):
 
                 period = pm.Uniform("period",
                                     testval=period_prior,
-                                    lower=period_prior+(3*self.system.pl_period_err2),
-                                    upper=period_prior+(3*self.system.pl_period_err1),
+                                    lower=period_prior+(2*self.system.pl_period_err2),
+                                    upper=period_prior+(2*self.system.pl_period_err1),
                                     shape=self.system.n_planets)
 
                 # factor * 10**logg / r_star = rho
