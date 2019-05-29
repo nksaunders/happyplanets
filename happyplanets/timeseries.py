@@ -51,6 +51,8 @@ class TimeSeries(object):
         y = np.array([], np.float64)
         yerr = np.array([], np.float64)
 
+        self.corrector = Corrector()
+
         for tpf in tpf_collection:
             mask = self.system.create_planet_mask(tpf.time)
 
@@ -59,7 +61,7 @@ class TimeSeries(object):
                 aperture_mask = tpf._parse_aperture_mask(self.global_aperture)
             else:
                 aperture_mask = tpf._parse_aperture_mask('threshold')
-            time, flux, error, gp = Corrector().PyMC_PLD(tpf, self.system, mask, aperture_mask)
+            time, flux, error, gp = self.corrector.PyMC_PLD(tpf, self.system, mask, aperture_mask)
 
             x = np.append(x, time)
             y = np.append(y, flux)
