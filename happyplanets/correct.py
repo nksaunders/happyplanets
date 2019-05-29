@@ -159,7 +159,7 @@ class Corrector(object):
                 return model, map_soln, gp
 
         # Compute the transit mask
-        mask = system.create_planet_mask(time)
+        mask = system.create_planet_mask(time, n_dur_mask=3)
 
         # First rough correction
         with silence():
