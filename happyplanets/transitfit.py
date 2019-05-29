@@ -25,7 +25,7 @@ from astropy.convolution import convolve, Box1DKernel
 from itertools import combinations_with_replacement as multichoose
 
 from .timeseries import TimeSeries
-from .planetsystem import PlanetSystem
+from .planetsystem import PlanetSystem, create_planet_system
 from .plotting import preview, pdf_summary
 from .utils import silence
 
@@ -36,8 +36,8 @@ class TransitFitter(object):
 
     def __init__(self, target_name=None, ind=None, n_obs='all'):
 
-        self.system = PlanetSystem(target_name=target_name, ind=ind)
-        self.target_name = self.system.host
+        self.system = create_planet_system(target_name)
+        self.target_name = target_name
         self.timeseries = TimeSeries(self.target_name, self.system)
         self.lightcurve = self.timeseries.return_lightcurve(n_obs)
         self._initial_fit_generated = False
