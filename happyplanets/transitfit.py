@@ -127,17 +127,17 @@ class TransitFitter(object):
                                shape=self.system.n_planets)
 
                 r_pl = pm.Uniform("r_pl",
-                                  testval=rprs_prior*self.system.st_rad,
-                                  lower=rprs_prior*self.system.st_rad+(3*self.system.st_rad_err2),
-                                  upper=rprs_prior*self.system.st_rad+(3*self.system.st_rad_err1),
+                                  testval=self.system.rprs,
+                                  lower=self.system.rprs+(5*self.system.rprs_err2),
+                                  upper=self.system.rprs+(5*self.system.rprs_err1),
                                   shape=self.system.n_planets)
 
                 rprs = pm.Deterministic("rprs", r_pl / r_star)
 
                 period = pm.Uniform("period",
                                     testval=period_prior,
-                                    lower=period_prior+3*self.system.pl_period_err2,
-                                    upper=period_prior+3*self.system.pl_period_err1,
+                                    lower=period_prior+(3*self.system.pl_period_err2),
+                                    upper=period_prior+(3*self.system.pl_period_err1),
                                     shape=self.system.n_planets)
 
                 # factor * 10**logg / r_star = rho
