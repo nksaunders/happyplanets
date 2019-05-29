@@ -38,6 +38,7 @@ class Planet(object):
 
         # store planet parameters
         self.host = host
+        self.letter = row['pl_letter']
 
         self.pl_period = row['pl_orbper'] * u.day
         self.pl_period_err1 = row['pl_orbpererr1'] * u.day
