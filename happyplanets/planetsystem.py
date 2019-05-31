@@ -32,7 +32,7 @@ __all__ = ['PlanetSystem']
 
 
 class PlanetSystem(object):
-    """ """
+    """A class to hold the Star and Planet objects for a given system."""
 
     def __init__(self, target_name=None, ind=None, star=None, planets=[]):
 
