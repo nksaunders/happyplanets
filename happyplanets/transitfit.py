@@ -1,3 +1,5 @@
+from pdb import set_trace as pdb
+
 import sys
 import os.path
 import logging
@@ -24,7 +26,7 @@ from astropy.stats import sigma_clip
 from astropy.convolution import convolve, Box1DKernel
 from itertools import combinations_with_replacement as multichoose
 
-from .timeseries import TimeSeries
+from .correct import Corrector
 from .planetsystem import PlanetSystem, create_planet_system
 from .plotting import preview, pdf_summary
 from .utils import silence
@@ -34,12 +36,15 @@ __all__ = ['TransitFitter']
 class TransitFitter(object):
     """ """
 
-    def __init__(self, target_name=None, ind=None, n_obs='all'):
+    def __init__(self, target_name=None, ind=None, aperture_mask='pipeline', n_obs='all'):
+
+        self.target_name = target_name
+        self.aperture_mask = aperture_mask
 
         self.system = create_planet_system(target_name)
-        self.target_name = target_name
-        self.timeseries = TimeSeries(self.target_name, self.system)
-        self.lightcurve = self.timeseries.return_lightcurve(n_obs)
+        self.lightcurve, self.tpf_collection = generate_light_curve(self.target_name, self.system,
+                                                                    aperture_mask=aperture_mask,
+                                                                    n_obs=n_obs)
         self._initial_fit_generated = False
 
 
@@ -56,7 +61,9 @@ class TransitFitter(object):
         if not self._initial_fit_generated:
             self.model = self.fit(self.lightcurve.time, self.lightcurve.flux, self.lightcurve.flux_err)
         model, light_curves, trace = self.sample(self.model)
-        pdf_summary(model, light_curves, trace, self.system, self.timeseries, self.target_name)
+        
+        pdf_summary(model, light_curves, trace, self.system, self.aperture_mask,
+                    self.tpf_collection, self.target_name)
 
     def fit(self, x, y, yerr):
         """ """
@@ -128,8 +135,8 @@ class TransitFitter(object):
 
                 r_pl = pm.Uniform("r_pl",
                                   testval=self.system.rprs,
-                                  lower=self.system.rprs+(5*self.system.rprs_err2),
-                                  upper=self.system.rprs+(5*self.system.rprs_err1),
+                                  lower=self.system.rprs+(10*self.system.rprs_err2),
+                                  upper=self.system.rprs+(10*self.system.rprs_err1),
                                   shape=self.system.n_planets)
 
                 rprs = pm.Deterministic("rprs", r_pl / r_star)
@@ -214,3 +221,52 @@ class TransitFitter(object):
                 light_curves[i] = func(*xo.utils.get_args_for_theano_function(sample))
 
         return model, light_curves, trace
+
+
+def generate_light_curve(target_name, system, aperture_mask='pipeline', n_obs=1):
+    """Downloads target pixel files, detrends, and returns a LightCurve object.
+
+    Parameters
+    ----------
+    `target_name` : str
+        Name of host star for the desired system.
+    `system` : happyplanets.System
+        A System object containing host star and planets.
+    `aperture_mask` : str or array-like
+        Aperture mask used to generate light curve.
+    `n_obs` : int or 'all'
+        Number of observations to download, detrend, and stitch together. 1 by
+        default.
+    """
+
+    search_result = lk.search_targetpixelfile(target_name)
+    if n_obs == 'all':
+        tpf_collection = search_result.download_all(quality_bitmask='hardest')
+    else:
+        tpf_collection = search_result[:n_obs].download_all(quality_bitmask='hardest')
+
+    # assign variables
+    x = np.array([], np.float64)
+    y = np.array([], np.float64)
+    yerr = np.array([], np.float64)
+
+    corrector = Corrector()
+
+    for tpf in tpf_collection:
+        planet_mask = system.create_planet_mask(tpf.time)
+
+        # make sure the pipeline aperture has at least 3 pixels
+        if np.sum(tpf._parse_aperture_mask('pipeline'), axis=(0,1)) >= 3:
+            aperture_mask = tpf._parse_aperture_mask(aperture_mask)
+        else:
+            warnings.warn('Pipeline aperture contains fewer than 3 pixels.'
+                          'Using threshold aperture mask instead.')
+            aperture_mask = tpf._parse_aperture_mask('threshold')
+        time, flux, error, gp = corrector.PyMC_PLD(tpf, system, planet_mask, aperture_mask)
+
+        x = np.append(x, time)
+        y = np.append(y, flux)
+        yerr = np.append(yerr, error)
+
+    lc = lk.LightCurve(time=x, flux=y, flux_err=yerr)
+    return lc, tpf_collection
