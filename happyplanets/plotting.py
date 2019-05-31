@@ -42,7 +42,7 @@ def preview(model, system, target_name):
     plt.legend(fontsize=10);
 
 
-def pdf_summary(model, light_curves, trace, system, timeseries, target_name):
+def pdf_summary(model, light_curves, trace, system, aperture_mask, tpf_collection, target_name):
 
     with model:
         mean = model.map_soln["mean"]
@@ -54,9 +54,9 @@ def pdf_summary(model, light_curves, trace, system, timeseries, target_name):
         print('Generating summary for target {}.'.format(target_name))
 
         '''Plot the tpf.'''
-        tpf = timeseries.tpf_collection[0]
+        tpf = tpf_collection[0]
         plt.figure(figsize=(3,3))
-        tpf.plot(aperture_mask=timeseries.global_aperture)
+        tpf.plot(aperture_mask=aperture_mask)
         plt.title('TPF')
         pdf.savefig()
         plt.close()
@@ -160,3 +160,7 @@ def pdf_summary(model, light_curves, trace, system, timeseries, target_name):
                     title_kwargs=dict(fontsize=10));
         pdf.savefig()
         plt.close()
+
+        '''Plot fit vs literature parameters in a table.
+        plt.figure(figsize=(7,7))
+        '''
