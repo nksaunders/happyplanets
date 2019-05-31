@@ -58,6 +58,12 @@ class Corrector(object):
         nanmask = np.isfinite(tpf.time)
         nanmask &= np.isfinite(raw_flux)
         nanmask &= np.isfinite(raw_flux_err)
+
+        # also mask cadences with 0 errors
+        # we weight fluxes by their inverse variance, and flux_error = 0 will
+        # cause computational problems
+        # manual inspection of the data shows that flux_err=0 is the result of
+        # a flux measurent issue in a tpf
         nanmask &= np.abs(raw_flux_err) > 1e-12
 
         # mask out nan values
@@ -68,10 +74,12 @@ class Corrector(object):
         time = time[nanmask]
 
         # Setting to Parts Per Thousand keeps us from hitting machine precision errors...
+        # why did I do this?
         raw_flux *= 1e3
         raw_flux_err *= 1e3
 
         # Build the first order PLD basis
+        # specific flux threshold for K2 saturation
         saturation = (np.nanpercentile(flux, 100, axis=0) > 175000)
         X1 = np.reshape(flux[:, aper & ~saturation], (len(tpf.flux), -1))
 
