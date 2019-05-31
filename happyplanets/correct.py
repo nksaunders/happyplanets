@@ -1,3 +1,5 @@
+from pdb import set_trace as pdb
+
 import sys
 import os.path
 import logging
@@ -119,8 +121,8 @@ class Corrector(object):
                 mask = np.zeros(len(time), dtype=bool)
 
             with pm.Model() as model:
+
                 # GP
-                # --------
                 diag = np.array(raw_flux_err**2)
                 diag[mask] += 1e12 # Temporarily increase the in-transit error bars
                 logs2 = pm.Normal("logs2", mu=np.log(np.var(raw_flux)), sd=4)
@@ -131,14 +133,12 @@ class Corrector(object):
                 gp = xo.gp.GP(kernel, time, diag + tt.exp(logs2))
 
                 # Motion model
-                #------------------
                 A = tt.dot(X_pld.T, gp.apply_inverse(X_pld))
                 B = tt.dot(X_pld.T, gp.apply_inverse(raw_flux[:, None]))
                 C = tt.slinalg.solve(A, B)
                 motion_model = pm.Deterministic("motion_model", tt.dot(X_pld, C)[:, 0])
 
                 # Likelihood
-                #------------------
                 pm.Potential("obs", gp.log_likelihood(raw_flux - motion_model))
 
                 # gp predicted flux
@@ -147,7 +147,6 @@ class Corrector(object):
                 pm.Deterministic("weights", C)
 
                 # Optimize
-                #------------------
                 if start is None:
                     start = model.test_point
                 map_soln = xo.optimize(start=start, vars=[logsigma])
@@ -159,30 +158,33 @@ class Corrector(object):
                 return model, map_soln, gp
 
         # Compute the transit mask
-        mask = system.create_planet_mask(time, n_dur_mask=3)
+        planet_mask = system.create_planet_mask(time, n_dur_mask=3)
 
         # First rough correction
         with silence():
-            model0, map_soln0, gp = build_model(mask=mask)
+            model0, map_soln0, gp = build_model(mask=planet_mask)
 
-        # Remove outliers, make sure to remove a few nearby points incase of flares.
+        # Remove outliers from initial model
         with model0:
             motion = np.dot(X_pld, map_soln0['weights']).reshape(-1)
             stellar = xo.eval_in_model(gp.predict(time), map_soln0)
             corrected = raw_flux - motion - stellar
+            out = ~sigma_clip(corrected, sigma=sigma).mask
+            out = ~(convolve(out, Box1DKernel(3), fill_value=0) != 0)
+            mask = out | planet_mask
+
+        # save outlier mask to remove later
+        out_mask = out & ~planet_mask
 
         self.diagnostics = {'raw_flux':raw_flux, 'motion':motion,
-                            'stellar':stellar, 'transit mask':mask,
+                            'stellar':stellar, 'transit mask':planet_mask,
                             'gp':gp, 'map_soln0':map_soln0, 'time':time}
 
-        # return variable `Diagnostics` (dictionary)
-        # diagnostic: plot raw, motion, stellar
-
-        '''
         # Optimize PLD
         with silence():
-            model, map_soln, gp = build_model(mask, map_soln0)
+            model, map_soln, gp = build_model(mask=mask)
 
+        '''
         # Burn in
         sampler = xo.PyMC3Sampler()
         with model:
@@ -212,15 +214,10 @@ class Corrector(object):
         star_model = np.mean(pred_mu + pred_motion, axis=0)
         star_model_err = np.std(pred_mu + pred_motion, axis=0)
         corrected = raw_flux - star_model
-
-        # remove outliers and store the mask if it's the first fit
-        if not tlsing:
-            time, corrected, raw_flux_err, mask = self.remove_outliers(time, corrected, raw_flux_err, mask)
-            self.old_mask = mask
         '''
-        return time, corrected, raw_flux_err, gp
-        # else:
-        #     return time, corrected, raw_flux_err, gp
+
+        return time[~out_mask], corrected[~out_mask], raw_flux_err[~out_mask], gp
+
 
     def plot_diagnostics(self):
 
