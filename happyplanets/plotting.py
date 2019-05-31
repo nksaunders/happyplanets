@@ -61,6 +61,12 @@ def pdf_summary(model, light_curves, trace, system, aperture_mask, tpf_collectio
         pdf.savefig()
         plt.close()
 
+        '''Plot the raw flux light curve'''
+        lc = tpf.to_lightcurve(aperture_mask=aperture_mask)
+        lc.scatter()
+        pdf.savefig()
+        plt.close()
+
         '''Plot the initial fit.'''
         plt.figure(figsize=(10,4))
         plt.plot(model.x, model.y - mean, "k.", label="data")
