@@ -31,7 +31,10 @@ from .planetsystem import PlanetSystem, create_planet_system
 from .plotting import preview, pdf_summary
 from .utils import silence
 
-__all__ = ['TransitFitter']
+"""TEMP IMPORT"""
+from lightkurve.correctors import pymcpldcorrector as pymcpld
+
+__all__ = ['TransitFitter', 'generate_light_curve']
 
 class TransitFitter(object):
     """ """
@@ -50,7 +53,10 @@ class TransitFitter(object):
 
     def test_fit(self):
         """Optimize parameters with PyMC3 and plot initial fit."""
-        self.model = self.fit(self.lightcurve.time, self.lightcurve.flux, self.lightcurve.flux_err)
+        x = np.array(self.lightcurve.time, np.float64)
+        y = np.array(self.lightcurve.flux, np.float64)
+        yerr = np.array(self.lightcurve.flux_err, np.float64)
+        self.model = self.fit(x, y, yerr)
         self._initial_fit_generated = True
         preview(self.model, self.system, self.target_name)
 
@@ -59,14 +65,27 @@ class TransitFitter(object):
         """Optimize parameters, sample posteriors, and generate a pdf summary of
         results."""
         if not self._initial_fit_generated:
-            self.model = self.fit(self.lightcurve.time, self.lightcurve.flux, self.lightcurve.flux_err)
+            x = np.array(self.lightcurve.time, np.float64)
+            y = np.array(self.lightcurve.flux, np.float64)
+            yerr = np.array(self.lightcurve.flux_err, np.float64)
+            self.model = self.fit(x, y, yerr)
         model, light_curves, trace = self.sample(self.model)
-        
+
         pdf_summary(model, light_curves, trace, self.system, self.aperture_mask,
                     self.tpf_collection, self.target_name)
 
     def fit(self, x, y, yerr):
-        """ """
+        """A helper function to generate a PyMC3 model and optimize parameters.
+
+        Parameters
+        ----------
+        x : array-like
+            The time series in days
+        y : array-like
+            The light curve flux values
+        yerr : array-like
+            Errors on the flux values
+        """
 
         # build_model should only take lc and system
         # model = build_model(lc, system)
@@ -74,15 +93,25 @@ class TransitFitter(object):
         def build_model(x, y, yerr, period_prior, t0_prior, rprs_prior, start=None):
             """Build an exoplanet model for a dataset and set of planets
 
-            Args:
-                x: The time series (in days); this should probably be centered
-                y: The relative fluxes (in parts per thousand)
-                yerr: The uncertainties on ``y``
-                period_prior: The periods of the planets (in days)
-                t0_prior: The phases of the planets in the same coordinates as ``x``
-                depths: The depths of the transits in parts per thousand
-                start: A dictionary of model parameters where the optimization
-                    should be initialized
+            Paramters
+            ---------
+            x : array-like
+                The time series (in days); this should probably be centered
+            y : array-like
+                The relative fluxes (in parts per thousand)
+            yerr : array-like
+                The uncertainties on ``y``
+            period_prior : list
+                The literature values for periods of the planets (in days)
+            t0_prior : list
+                The literature values for phases of the planets in the same
+                coordinates as `x`
+            rprs_prior : list
+                The literature values for the ratio of planet radius to star
+                radius
+            start : dict
+                A dictionary of model parameters where the optimization
+                should be initialized
 
             Returns:
                 A PyMC3 model specifying the probabilistic model for the light curve
@@ -155,6 +184,10 @@ class TransitFitter(object):
                 # Set up a Keplerian orbit for the planets
                 model.orbit = xo.orbits.KeplerianOrbit(
                     period=period, t0=t0, b=b, r_star=r_star, m_star=m_star)# rho_star=rho_star)
+
+                """# track additional orbital parameters
+                a = pm.Deterministic("a", model.orbit.a)
+                incl = pm.Deterministic("incl", model.orbit.incl)"""
 
                 # Compute the model light curve using starry
                 model.light_curves = xo.StarryLightCurve(u).get_light_curve(
@@ -245,14 +278,10 @@ def generate_light_curve(target_name, system, aperture_mask='pipeline', n_obs=1)
     else:
         tpf_collection = search_result[:n_obs].download_all(quality_bitmask='hardest')
 
-    # assign variables
-    x = np.array([], np.float64)
-    y = np.array([], np.float64)
-    yerr = np.array([], np.float64)
-
-    corrector = Corrector()
+    lc_collection = []
 
     for tpf in tpf_collection:
+        # create transit mask
         planet_mask = system.create_planet_mask(tpf.time)
 
         # make sure the pipeline aperture has at least 3 pixels
@@ -262,11 +291,21 @@ def generate_light_curve(target_name, system, aperture_mask='pipeline', n_obs=1)
             warnings.warn('Pipeline aperture contains fewer than 3 pixels.'
                           'Using threshold aperture mask instead.')
             aperture_mask = tpf._parse_aperture_mask('threshold')
-        time, flux, error, gp = corrector.PyMC_PLD(tpf, system, planet_mask, aperture_mask)
 
-        x = np.append(x, time)
-        y = np.append(y, flux)
-        yerr = np.append(yerr, error)
+        """TEMP SYNTAX"""
+        pld = pymcpld.PyMCPLDCorrector(tpf, aperture_mask=aperture_mask, pld_aperture_mask='all')
+        lc = pld.correct(cadence_mask=~planet_mask, remove_gp_trend=True)
+        # for POWER USERS like Christina
+        # gp, noise_model, corrected = pld.get_diagnostic_lightcurves()
+        lc = lc.normalize()
+        lc.flux -= 1.
+        lc_collection.append(lc)
+        pld.plot_diagnostics()
 
-    lc = lk.LightCurve(time=x, flux=y, flux_err=yerr)
-    return lc, tpf_collection
+    final_lc = lc_collection[0]
+    # stitch together additional observations
+    if n_obs > 1:
+        for lc in lc_collection[1:]:
+            final_lc.append(lc)
+
+    return final_lc, tpf_collection

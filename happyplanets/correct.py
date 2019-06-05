@@ -165,9 +165,6 @@ class Corrector(object):
                 map_soln = xo.optimize(start=map_soln, vars=[logrho, logsigma, logs2])
                 return model, map_soln, gp
 
-        # Compute the transit mask
-        planet_mask = system.create_planet_mask(time, n_dur_mask=3)
-
         # First rough correction
         with silence():
             model0, map_soln0, gp = build_model(mask=planet_mask)
