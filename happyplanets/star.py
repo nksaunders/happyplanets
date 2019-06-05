@@ -31,6 +31,7 @@ class Star(object):
 
         self.fetch_parameters(row)
 
+
     def fetch_parameters(self, row):
         """Store parameters read in from row."""
 

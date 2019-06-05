@@ -28,7 +28,7 @@ from .utils import read_local_data, time_mask
 from .planet import Planet
 from .star import Star
 
-__all__ = ['PlanetSystem']
+__all__ = ['PlanetSystem', 'create_planet_system']
 
 
 class PlanetSystem(object):
