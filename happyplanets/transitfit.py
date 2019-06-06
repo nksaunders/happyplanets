@@ -31,10 +31,8 @@ from .planetsystem import PlanetSystem, create_planet_system
 from .plotting import preview, pdf_summary
 from .utils import silence
 
-"""TEMP IMPORT"""
-from lightkurve.correctors import pymcpldcorrector as pymcpld
-
 __all__ = ['TransitFitter', 'generate_light_curve']
+
 
 class TransitFitter(object):
     """ """
@@ -280,7 +278,7 @@ def generate_light_curve(target_name, system, aperture_mask='pipeline', n_obs=1)
 
     lc_collection = []
 
-    for tpf in tpf_collection:
+    for tpf in tpf_collection[:n_obs]:
         # create transit mask
         planet_mask = system.create_planet_mask(tpf.time)
 
@@ -292,13 +290,15 @@ def generate_light_curve(target_name, system, aperture_mask='pipeline', n_obs=1)
                           'Using threshold aperture mask instead.')
             aperture_mask = tpf._parse_aperture_mask('threshold')
 
-        """TEMP SYNTAX"""
-        pld = pymcpld.PyMCPLDCorrector(tpf, aperture_mask=aperture_mask, pld_aperture_mask='all')
+        # use PLD to remove systematic noise
+        pld = lk.PLDCorrector(tpf, aperture_mask=aperture_mask, pld_aperture_mask='all')
         lc = pld.correct(cadence_mask=~planet_mask, remove_gp_trend=True)
-        # for POWER USERS like Christina
-        # gp, noise_model, corrected = pld.get_diagnostic_lightcurves()
+        # examine noise removal success
+        pld.plot_diagnostics()
+
+        # normalize to 0 and stitch together
         lc = lc.normalize()
-        lc.flux -= 1.
+        lc.flux = (lc.flux - 1) * 1e3
         lc_collection.append(lc)
         pld.plot_diagnostics()
 
