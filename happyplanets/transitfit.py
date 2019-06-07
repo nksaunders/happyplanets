@@ -272,9 +272,9 @@ def generate_light_curve(target_name, system, aperture_mask='pipeline', n_obs=1)
 
     search_result = lk.search_targetpixelfile(target_name)
     if n_obs == 'all':
-        tpf_collection = search_result.download_all(quality_bitmask='hardest')
+        tpf_collection = search_result.download_all(quality_bitmask='hard')
     else:
-        tpf_collection = search_result[:n_obs].download_all(quality_bitmask='hardest')
+        tpf_collection = search_result[:n_obs].download_all(quality_bitmask='hard')
 
     lc_collection = []
 
