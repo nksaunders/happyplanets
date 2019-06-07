@@ -94,7 +94,7 @@ def pdf_summary(model, light_curves, trace, system, aperture_mask, tpf_collectio
             # Compute the median of posterior estimate of the contribution from
             # the other planet. Then we can remove this from the data to plot
             # just the planet we care about.
-            inds = np.arange(len(system.pl_period)) != n
+            inds = np.arange(len(system.pl_orbper)) != n
             others = np.median(1e3*np.sum(light_curves[:, :, inds], axis=-1), axis=0)
 
             # Plot the folded data

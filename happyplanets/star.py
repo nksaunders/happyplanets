@@ -38,12 +38,16 @@ class Star(object):
         # store stellar parameters
         self.hostname = np.atleast_1d(row['pl_hostname'])[0]
         self.st_mass = np.atleast_1d(row['st_mass'])[0] * u.solMass
-        self.st_mass_err1 = np.atleast_1d(row['st_masserr1'])[0] * u.solMass
-        self.st_mass_err2 = np.atleast_1d(row['st_masserr2'])[0] * u.solMass
+        self.st_masserr1 = np.atleast_1d(row['st_masserr1'])[0] * u.solMass
+        self.st_masserr2 = np.atleast_1d(row['st_masserr2'])[0] * u.solMass
+
+        self.st_teff = np.atleast_1d(row['st_teff'])[0] * u.K
+        self.st_tefferr1 = np.atleast_1d(row['st_tefferr1'])[0] * u.K
+        self.st_tefferr2 = np.atleast_1d(row['st_tefferr2'])[0] * u.K
 
         self.st_rad = np.atleast_1d(row['st_rad'])[0] * u.solRad
-        self.st_rad_err1 = np.atleast_1d(row['st_raderr1'])[0] * u.solRad
-        self.st_rad_err2 = np.atleast_1d(row['st_raderr2'])[0] * u.solRad
+        self.st_raderr1 = np.atleast_1d(row['st_raderr1'])[0] * u.solRad
+        self.st_raderr2 = np.atleast_1d(row['st_raderr2'])[0] * u.solRad
 
     @property
     def properties(self):
@@ -58,7 +62,7 @@ class Star(object):
     def errors(self):
         """Returns a dictionary of errors on stellar parameters."""
 
-        dict = {"Stellar Mass Error":[self.st_mass_err1,self.st_mass_err2],
-                "Stellar Radius Error":[self.st_rad_err1,self.st_rad_err2]}
+        dict = {"Stellar Mass Error":[self.st_masserr1,self.st_masserr2],
+                "Stellar Radius Error":[self.st_raderr1,self.st_raderr2]}
 
         return dict

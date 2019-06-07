@@ -49,21 +49,21 @@ class PlanetSystem(object):
 
         dict = {'n Planets':self.n_planets,
                 'Host Name':self.host,
-                'Period':self.pl_period,
-                'Period err1':self.pl_period_err1,
-                'Period err2':self.pl_period_err2,
-                't0':self.pl_t0,
-                't0 err1':self.pl_t0_err1,
-                't0 err2':self.pl_t0_err2,
-                'Planet Radius':self.pl_rad,
-                'Planet Radius err1':self.pl_rad_err1,
-                'Planet Radius err2':self.pl_rad_err2,
+                'Period':self.pl_orbper,
+                'Period err1':self.pl_orbpererr1,
+                'Period err2':self.pl_orbpererr2,
+                't0':self.pl_tranmid,
+                't0 err1':self.pl_tranmiderr1,
+                't0 err2':self.pl_tranmiderr2,
+                'Planet Radius':self.pl_radj,
+                'Planet Radius err1':self.pl_radjerr1,
+                'Planet Radius err2':self.pl_radjerr2,
                 'Stellar Radius':self.st_rad,
-                'Stellar Radius err1':self.st_rad_err1,
-                'Stellar Radius err2':self.st_rad_err2,
+                'Stellar Radius err1':self.st_raderr1,
+                'Stellar Radius err2':self.st_raderr2,
                 'Stellar Mass':self.st_mass,
-                'Stellar Mass err1':self.st_mass_err1,
-                'Stellar Mass err2':self.st_mass_err2,
+                'Stellar Mass err1':self.st_masserr1,
+                'Stellar Mass err2':self.st_masserr2,
                 'Rp/Rs':self.rprs}
 
         return pd.DataFrame(dict).T.__repr__()
@@ -72,30 +72,34 @@ class PlanetSystem(object):
     def fetch_parameters(self):
         """Store stellar and planetary parameters as variables of PlanetSystem."""
 
-        self.pl_period = np.array([p.pl_period.value for p in self.planets])
-        self.pl_period_err1 = np.array([p.pl_period_err1.value for p in self.planets])
-        self.pl_period_err2 = np.array([p.pl_period_err2.value for p in self.planets])
+        self.pl_orbper = np.array([p.pl_orbper.value for p in self.planets])
+        self.pl_orbpererr1 = np.array([p.pl_orbpererr1.value for p in self.planets])
+        self.pl_orbpererr2 = np.array([p.pl_orbpererr2.value for p in self.planets])
 
-        self.pl_t0 = np.array([p.pl_t0.value for p in self.planets])
-        self.pl_t0_err1 = np.array([p.pl_t0_err1.value for p in self.planets])
-        self.pl_t0_err2 = np.array([p.pl_t0_err2.value for p in self.planets])
+        self.pl_tranmid = np.array([p.pl_tranmid.value for p in self.planets])
+        self.pl_tranmiderr1 = np.array([p.pl_tranmiderr1.value for p in self.planets])
+        self.pl_tranmiderr2 = np.array([p.pl_tranmiderr2.value for p in self.planets])
 
-        self.pl_rad = np.array([p.pl_rad.value for p in self.planets])
-        self.pl_rad_err1 = np.array([p.pl_rad_err1.value for p in self.planets])
-        self.pl_rad_err2 = np.array([p.pl_rad_err2.value for p in self.planets])
+        self.pl_radj = np.array([p.pl_radj.value for p in self.planets])
+        self.pl_radjerr1 = np.array([p.pl_radjerr1.value for p in self.planets])
+        self.pl_radjerr2 = np.array([p.pl_radjerr2.value for p in self.planets])
 
         self.rprs = np.array([p.rprs for p in self.planets])
-        self.rprs_err1 = np.array([p.rprs_err1 for p in self.planets])
-        self.rprs_err2 = np.array([p.rprs_err2 for p in self.planets])
+        self.rprserr1 = np.array([p.rprserr1 for p in self.planets])
+        self.rprserr2 = np.array([p.rprserr2 for p in self.planets])
 
         # store stellar parameters
         self.st_mass = self.star.st_mass.value
-        self.st_mass_err1 = self.star.st_mass_err1.value
-        self.st_mass_err2 = self.star.st_mass_err2.value
+        self.st_masserr1 = self.star.st_masserr1.value
+        self.st_masserr2 = self.star.st_masserr2.value
 
         self.st_rad = self.star.st_rad.value
-        self.st_rad_err1 = self.star.st_rad_err1.value
-        self.st_rad_err2 = self.star.st_rad_err2.value
+        self.st_raderr1 = self.star.st_raderr1.value
+        self.st_raderr2 = self.star.st_raderr2.value
+
+        self.st_teff = self.star.st_teff.value
+        self.st_tefferr1 = self.star.st_tefferr1.value
+        self.st_tefferr2 = self.star.st_tefferr2.value
 
 
     def build_star(self, rows):
@@ -120,7 +124,7 @@ class PlanetSystem(object):
 
         mask = np.zeros_like(t, dtype=bool)
         for p in self.planets:
-            mask |= time_mask(t, p.pl_t0.value, p.pl_period.value, n_dur_mask*p.duration.value)
+            mask |= time_mask(t, p.pl_tranmid.value, p.pl_orbper.value, n_dur_mask*p.duration.value)
         return mask
 
 

@@ -127,65 +127,44 @@ class TransitFitter(object):
                 model.y = y
                 model.yerr = (yerr + np.zeros_like(x))
 
+                '''Stellar Parameters'''
                 # The baseline (out-of-transit) flux for the star in ppt
-                mean = pm.Normal("mean",
-                                 mu=0.0,
-                                 sd=10.0)
+                mean = pm.Normal("mean", mu=0.0, sd=10.0)
 
-                r_star = pm.Normal("r_star",
-                                   mu=self.system.st_rad,
-                                   sd=self.system.st_rad_err1)
+                # Fixed stellar parameters
+                r_star = pm.Normal("r_star", mu=self.system.st_rad, sd=self.system.st_raderr1)
+                m_star = pm.Normal("m_star", mu=self.system.st_mass, sd=self.system.st_masserr1)
+                t_star = pm.Normal("t_star", mu=self.system.st_teff, sd=self.system.st_tefferr1)
 
-                m_star = pm.Normal("m_star",
-                                   mu=self.system.st_mass,
-                                   sd=self.system.st_mass_err1)
-
-                # Prior to require physical parameters
-                pm.Potential("r_star_prior",
-                             tt.switch(r_star > 0, 0, -np.inf))
-
+                '''Orbital Parameters'''
                 # The time of a reference transit for each planet
-                t0 = pm.Normal("t0",
-                               mu=t0_prior,
-                               sd=self.system.pl_t0_err1,
-                               shape=self.system.n_planets)
-
-                # quadratic limb darkening paramters
-                u = xo.distributions.QuadLimbDark("u")
-
-                # Orbital parameters
-                b = pm.Uniform("b",
-                               lower=0,
-                               upper=1,
-                               testval=0.5,
-                               shape=self.system.n_planets)
-
-                r_pl = pm.Uniform("r_pl",
-                                  testval=self.system.rprs,
-                                  lower=self.system.rprs+(10*self.system.rprs_err2),
-                                  upper=self.system.rprs+(10*self.system.rprs_err1),
-                                  shape=self.system.n_planets)
-
-                rprs = pm.Deterministic("rprs", r_pl / r_star)
-
-                period = pm.Uniform("period",
-                                    testval=period_prior,
-                                    lower=period_prior+(2*self.system.pl_period_err2),
-                                    upper=period_prior+(2*self.system.pl_period_err1),
+                t0 = pm.Normal("t0", mu=t0_prior, sd=self.system.pl_tranmiderr1, shape=self.system.n_planets)
+                period = pm.Uniform("period", testval=period_prior,
+                                    lower=period_prior+(2*self.system.pl_orbpererr2),
+                                    upper=period_prior+(2*self.system.pl_orbpererr1),
                                     shape=self.system.n_planets)
-
-                # factor * 10**logg / r_star = rho
-                # factor = 5.141596357654149e-05
-                # rho_star = pm.Deterministic("rho_star", factor * 10**logg_star / r_star)
-                # logg_star = pm.Normal("logg_star", mu=logg, sd=logg_err)
+                b = pm.Uniform("b", testval=0.5, shape=self.system.n_planets)
 
                 # Set up a Keplerian orbit for the planets
                 model.orbit = xo.orbits.KeplerianOrbit(
                     period=period, t0=t0, b=b, r_star=r_star, m_star=m_star)# rho_star=rho_star)
 
-                """# track additional orbital parameters
+                # track additional orbital parameters
                 a = pm.Deterministic("a", model.orbit.a)
-                incl = pm.Deterministic("incl", model.orbit.incl)"""
+                incl = pm.Deterministic("incl", model.orbit.incl)
+
+                '''Planet Parameters'''
+                # quadratic limb darkening paramters
+                u = xo.distributions.QuadLimbDark("u")
+
+                r_pl = pm.Uniform("r_pl",
+                                  testval=self.system.rprs,
+                                  lower=self.system.rprs+(10*self.system.rprserr2),
+                                  upper=self.system.rprs+(10*self.system.rprserr1),
+                                  shape=self.system.n_planets)
+
+                rprs = pm.Deterministic("rprs", r_pl / r_star)
+                teff = pm.Deterministic('teff', t_star * tt.sqrt(0.5*(1/a)))
 
                 # Compute the model light curve using starry
                 model.light_curves = xo.StarryLightCurve(u).get_light_curve(
@@ -209,7 +188,8 @@ class TransitFitter(object):
                     start = model.test_point
                 map_soln = xo.optimize(start=start, vars=[period, t0])
                 map_soln = xo.optimize(start=map_soln, vars=[rprs, mean])
-                map_soln = xo.optimize(start=map_soln, vars=[r_star])
+                if self.system.n_planets > 1:
+                    map_soln = xo.optimize(start=map_soln, vars=[r_star])
                 map_soln = xo.optimize(start=map_soln, vars=[period, t0, mean])
                 map_soln = xo.optimize(start=map_soln, vars=[rprs, mean])
                 map_soln = xo.optimize(start=map_soln)
@@ -218,7 +198,7 @@ class TransitFitter(object):
             return model
 
         # build our initial model and store a static version of the output for plotting
-        model = build_model(x, y, yerr, self.system.pl_period, self.system.pl_t0, self.system.rprs)
+        model = build_model(x, y, yerr, self.system.pl_orbper, self.system.pl_tranmid, self.system.rprs)
         with model:
             mean = model.map_soln["mean"]
             static_lc = xo.utils.eval_in_model(model.light_curves, model.map_soln)
@@ -243,9 +223,9 @@ class TransitFitter(object):
         out.to_csv(os.path.join(output_dir, '{}_fit_parameters.csv'.format(self.target_name)))
 
         # compute fits for out light curves from the sampled parameters
-        periods = [self.system.pl_period]
+        periods = [self.system.pl_orbper]
         with model:
-            light_curves = np.empty((500, len(model.x), len(self.system.pl_period)))
+            light_curves = np.empty((500, len(model.x), len(self.system.pl_orbper)))
             func = xo.utils.get_theano_function_for_var(model.light_curves)
             for i, sample in enumerate(xo.utils.get_samples_from_trace(
                     trace, size=len(light_curves))):
@@ -300,7 +280,6 @@ def generate_light_curve(target_name, system, aperture_mask='pipeline', n_obs=1)
         lc = lc.normalize()
         lc.flux = (lc.flux - 1) * 1e3
         lc_collection.append(lc)
-        pld.plot_diagnostics()
 
     final_lc = lc_collection[0]
     # stitch together additional observations

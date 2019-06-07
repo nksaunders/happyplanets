@@ -40,26 +40,26 @@ class Planet(object):
         self.host = host
         self.letter = row['pl_letter']
 
-        self.pl_period = row['pl_orbper'] * u.day
-        self.pl_period_err1 = row['pl_orbpererr1'] * u.day
-        self.pl_period_err2 = row['pl_orbpererr2'] * u.day
+        self.pl_orbper = row['pl_orbper'] * u.day
+        self.pl_orbpererr1 = row['pl_orbpererr1'] * u.day
+        self.pl_orbpererr2 = row['pl_orbpererr2'] * u.day
 
-        self.pl_t0 = (row['pl_tranmid'] - 2454833) * u.day
-        self.pl_t0_err1 = row['pl_tranmiderr1'] * u.day
-        self.pl_t0_err2 = row['pl_tranmiderr2'] * u.day
+        self.pl_tranmid = (row['pl_tranmid'] - 2454833) * u.day
+        self.pl_tranmiderr1 = row['pl_tranmiderr1'] * u.day
+        self.pl_tranmiderr2 = row['pl_tranmiderr2'] * u.day
 
-        self.pl_rad = (row['pl_radj'] * u.jupiterRad).to(u.earthRad)
-        self.pl_rad_err1 = (row['pl_radjerr1']* u.jupiterRad).to(u.earthRad)
-        self.pl_rad_err2 = (row['pl_radjerr2']* u.jupiterRad).to(u.earthRad)
+        self.pl_radj = (row['pl_radj'] * u.jupiterRad).to(u.earthRad)
+        self.pl_radjerr1 = (row['pl_radjerr1']* u.jupiterRad).to(u.earthRad)
+        self.pl_radjerr2 = (row['pl_radjerr2']* u.jupiterRad).to(u.earthRad)
 
-        self.rprs = (self.pl_rad.to(u.solRad) / self.host.st_rad).value
-        self.rprs_err1 = (self.pl_rad_err1.to(u.solRad) / self.host.st_rad).value
-        self.rprs_err2 = (self.pl_rad_err2.to(u.solRad) / self.host.st_rad).value
+        self.rprs = (self.pl_radj.to(u.solRad) / self.host.st_rad).value
+        self.rprserr1 = (self.pl_radjerr1.to(u.solRad) / self.host.st_rad).value
+        self.rprserr2 = (self.pl_radjerr2.to(u.solRad) / self.host.st_rad).value
 
 
     @property
     def separation(self):
-        sep = (((G*self.host.st_mass/(4*np.pi**2)) * (self.pl_period)**2)**(1/3)).to(u.solRad)
+        sep = (((G*self.host.st_mass/(4*np.pi**2)) * (self.pl_orbper)**2)**(1/3)).to(u.solRad)
         separation = (sep / self.host.st_mass).value
 
         return separation
@@ -68,7 +68,7 @@ class Planet(object):
     def duration(self):
         self.inclination = 90 # check this param
         b = self.separation * np.cos(self.inclination * np.pi/180)
-        l = ((self.host.st_rad + self.pl_rad.to(u.solRad))**2 + (b * self.host.st_rad)**2)**0.5
+        l = ((self.host.st_rad + self.pl_radj.to(u.solRad))**2 + (b * self.host.st_rad)**2)**0.5
         l /= (self.separation*self.host.st_rad)
 
-        return (np.arcsin(l.value) * self.pl_period/np.pi)
+        return (np.arcsin(l.value) * self.pl_orbper/np.pi)
