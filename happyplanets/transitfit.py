@@ -172,14 +172,10 @@ class TransitFitter(object):
 
                 model.light_curve = pm.math.sum(model.light_curves, axis=-1) * 1e3 + mean
 
-                # Jitter and likelihood function
-                logs2 = pm.Normal("logs2",
-                                  mu=np.log(np.mean(model.yerr)),
-                                  sd=10)
 
                 pm.Normal("obs",
                           mu=model.light_curve,
-                          sd=tt.sqrt(model.yerr**2+tt.exp(logs2)),
+                          sd=model.yerr,
                           observed=model.y)
 
                 # Fit for the maximum a posteriori parameters, I've found that I can get
@@ -271,8 +267,8 @@ def generate_light_curve(target_name, system, aperture_mask='pipeline', n_obs=1)
             aperture_mask = tpf._parse_aperture_mask('threshold')
 
         # use PLD to remove systematic noise
-        pld = lk.PLDCorrector(tpf, aperture_mask=aperture_mask, pld_aperture_mask='all')
-        lc = pld.correct(cadence_mask=~planet_mask, remove_gp_trend=True)
+        pld = lk.PLDCorrector(tpf, aperture_mask=aperture_mask, design_matrix_aperture_mask='all')
+        lc = pld.correct(cadence_mask=~planet_mask, remove_gp_trend=True, pld_order=2)
         # examine noise removal success
         pld.plot_diagnostics()
 
